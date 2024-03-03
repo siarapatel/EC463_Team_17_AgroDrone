@@ -37,6 +37,8 @@ def capture(
             self.jpeg_quality = jpeg_quality
             self.outdir = outdir
             self.burst = burst
+            self.no_metadata = no_metadata
+            
     picam0 = None
     picam1 = None
 
