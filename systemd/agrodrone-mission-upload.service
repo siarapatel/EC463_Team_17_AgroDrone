@@ -9,8 +9,7 @@ User=sr-design
 WorkingDirectory=/home/sr-design/EC463_Team_17_AgroDrone/uart
 Environment="AGRO_OUTDIR=/home/sr-design/export"
 ExecStart=/home/sr-design/.local/bin/uv run MissionUploader.py
-Restart=always
-RestartSec=3
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target

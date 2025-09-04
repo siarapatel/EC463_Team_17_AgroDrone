@@ -1,0 +1,207 @@
+{
+  "capture_timestamp": "20260130_012731_779584",
+  "burst_count": 5,
+  "jpeg_quality": 90,
+  "timing": {
+    "camera_0_duration_s": 0.42259764671325684,
+    "camera_0_per_frame_s": 0.08451952934265136,
+    "camera_1_duration_s": 0.38552308082580566,
+    "camera_1_per_frame_s": 0.07710461616516114
+  },
+  "camera_0": {
+    "camera_index": 0,
+    "timestamp": "20260130_012731_779584",
+    "burst_count": 5,
+    "jpeg_quality": 90,
+    "burst_captures": [
+      {
+        "burst_index": 0,
+        "rgb_path": "home/sr-design/export/20260130_012731_779584_cam0_burst00_rgb.jpg",
+        "rgb_shape": [
+          2464,
+          3280,
+          3
+        ],
+        "metadata": {
+          "ExposureTime": 49999,
+          "AnalogueGain": 2.327272653579712,
+          "ColourGains": [
+            0.9706867337226868,
+            3.2650678157806396
+          ],
+          "SensorTimestamp": 5175813598000
+        }
+      },
+      {
+        "burst_index": 1,
+        "rgb_path": "home/sr-design/export/20260130_012731_779584_cam0_burst01_rgb.jpg",
+        "rgb_shape": [
+          2464,
+          3280,
+          3
+        ],
+        "metadata": {
+          "ExposureTime": 49999,
+          "AnalogueGain": 2.327272653579712,
+          "ColourGains": [
+            0.9706867337226868,
+            3.2650678157806396
+          ],
+          "SensorTimestamp": 5175963826000
+        }
+      },
+      {
+        "burst_index": 2,
+        "rgb_path": "home/sr-design/export/20260130_012731_779584_cam0_burst02_rgb.jpg",
+        "rgb_shape": [
+          2464,
+          3280,
+          3
+        ],
+        "metadata": {
+          "ExposureTime": 49999,
+          "AnalogueGain": 2.327272653579712,
+          "ColourGains": [
+            0.9706867337226868,
+            3.2650678157806396
+          ],
+          "SensorTimestamp": 5176063980000
+        }
+      },
+      {
+        "burst_index": 3,
+        "rgb_path": "home/sr-design/export/20260130_012731_779584_cam0_burst03_rgb.jpg",
+        "rgb_shape": [
+          2464,
+          3280,
+          3
+        ],
+        "metadata": {
+          "ExposureTime": 49999,
+          "AnalogueGain": 2.0317461490631104,
+          "ColourGains": [
+            0.9706867337226868,
+            3.2650678157806396
+          ],
+          "SensorTimestamp": 5176114051000
+        }
+      },
+      {
+        "burst_index": 4,
+        "rgb_path": "home/sr-design/export/20260130_012731_779584_cam0_burst04_rgb.jpg",
+        "rgb_shape": [
+          2464,
+          3280,
+          3
+        ],
+        "metadata": {
+          "ExposureTime": 49999,
+          "AnalogueGain": 2.0317461490631104,
+          "ColourGains": [
+            0.9706867337226868,
+            3.2650678157806396
+          ],
+          "SensorTimestamp": 5176164138000
+        }
+      }
+    ]
+  },
+  "camera_1": {
+    "camera_index": 1,
+    "timestamp": "20260130_012731_779584",
+    "burst_count": 5,
+    "jpeg_quality": 90,
+    "burst_captures": [
+      {
+        "burst_index": 0,
+        "rgb_path": "home/sr-design/export/20260130_012731_779584_cam1_burst00_rgb.jpg",
+        "rgb_shape": [
+          2464,
+          3280,
+          3
+        ],
+        "metadata": {
+          "ExposureTime": 12608,
+          "AnalogueGain": 1.4970760345458984,
+          "ColourGains": [
+            1.2846546173095703,
+            1.9154423475265503
+          ],
+          "SensorTimestamp": 5176208126000
+        }
+      },
+      {
+        "burst_index": 1,
+        "rgb_path": "home/sr-design/export/20260130_012731_779584_cam1_burst01_rgb.jpg",
+        "rgb_shape": [
+          2464,
+          3280,
+          3
+        ],
+        "metadata": {
+          "ExposureTime": 12533,
+          "AnalogueGain": 1.4970760345458984,
+          "ColourGains": [
+            1.2848631143569946,
+            1.915089726448059
+          ],
+          "SensorTimestamp": 5176349676000
+        }
+      },
+      {
+        "burst_index": 2,
+        "rgb_path": "home/sr-design/export/20260130_012731_779584_cam1_burst02_rgb.jpg",
+        "rgb_shape": [
+          2464,
+          3280,
+          3
+        ],
+        "metadata": {
+          "ExposureTime": 12533,
+          "AnalogueGain": 1.4970760345458984,
+          "ColourGains": [
+            1.2849595546722412,
+            1.9149266481399536
+          ],
+          "SensorTimestamp": 5176444041000
+        }
+      },
+      {
+        "burst_index": 3,
+        "rgb_path": "home/sr-design/export/20260130_012731_779584_cam1_burst03_rgb.jpg",
+        "rgb_shape": [
+          2464,
+          3280,
+          3
+        ],
+        "metadata": {
+          "ExposureTime": 12533,
+          "AnalogueGain": 1.4970760345458984,
+          "ColourGains": [
+            1.2850512266159058,
+            1.914771556854248
+          ],
+          "SensorTimestamp": 5176491232000
+        }
+      },
+      {
+        "burst_index": 4,
+        "rgb_path": "home/sr-design/export/20260130_012731_779584_cam1_burst04_rgb.jpg",
+        "rgb_shape": [
+          2464,
+          3280,
+          3
+        ],
+        "metadata": {
+          "ExposureTime": 12533,
+          "AnalogueGain": 1.4970760345458984,
+          "ColourGains": [
+            1.285220980644226,
+            1.9144843816757202
+          ],
+          "SensorTimestamp": 5176585603000
+        }
+      }
+    ]
+  }
+}

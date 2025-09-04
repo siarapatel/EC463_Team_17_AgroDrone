@@ -1,0 +1,198 @@
+Sep 03 20:42:59 raspberrypi kernel: rp1-cfe 1f00128000.csi: Using a link rate of 912 Mbps
+Sep 03 20:42:59 raspberrypi go[1502]: 2025/09/03 20:42:59 Error occured on scp: connect: dial tcp 10.193.141.194:22: connect: no route to host
+Sep 03 20:43:02 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Scheduled restart job, restart counter is at 234.
+Sep 03 20:43:02 raspberrypi systemd[1117]: Starting rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect...
+Sep 03 20:43:02 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Control process exited, code=exited, status=1/FAILURE
+Sep 03 20:43:02 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Failed with result 'exit-code'.
+Sep 03 20:43:02 raspberrypi systemd[1117]: Failed to start rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect.
+Sep 03 20:43:05 raspberrypi unix_chkpwd[5338]: account sr-design has password changed in future
+Sep 03 20:43:05 raspberrypi sudo[5281]: sr-design : TTY=pts/1 ; PWD=/home/sr-design ; USER=root ; COMMAND=/usr/bin/journalctl -f
+Sep 03 20:43:05 raspberrypi sudo[5281]: pam_unix(sudo:session): session opened for user root(uid=0) by sr-design(uid=1002)
+Sep 03 20:43:07 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Scheduled restart job, restart counter is at 235.
+Sep 03 20:43:07 raspberrypi systemd[1117]: Starting rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect...
+Sep 03 20:43:07 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Control process exited, code=exited, status=1/FAILURE
+Sep 03 20:43:07 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Failed with result 'exit-code'.
+Sep 03 20:43:07 raspberrypi systemd[1117]: Failed to start rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect.
+Sep 03 20:43:07 raspberrypi uv[1364]: [0:35:19.524223771] [5331]  INFO Camera camera_manager.cpp:330 libcamera v0.5.2+99-bfd68f78
+Sep 03 20:43:07 raspberrypi uv[1364]: [0:35:19.542961512] [5345]  INFO RPI pisp.cpp:720 libpisp version 1.3.0
+Sep 03 20:43:07 raspberrypi uv[1364]: [0:35:19.546648308] [5345]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx219.json
+Sep 03 20:43:07 raspberrypi uv[1364]: [0:35:19.558240123] [5345]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10' for pipeline handler rpi/pisp
+Sep 03 20:43:07 raspberrypi uv[1364]: [0:35:19.558287494] [5345]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10 to CFE device /dev/media2 and ISP device /dev/media0 using PiSP variant BCM2712_C0
+Sep 03 20:43:07 raspberrypi uv[1364]: [0:35:19.558394123] [5345]  INFO RPI pisp.cpp:720 libpisp version 1.3.0
+Sep 03 20:43:07 raspberrypi uv[1364]: [0:35:19.561135660] [5345]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx219.json
+Sep 03 20:43:07 raspberrypi uv[1364]: [0:35:19.572398401] [5345]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10' for pipeline handler rpi/pisp
+Sep 03 20:43:07 raspberrypi uv[1364]: [0:35:19.572424883] [5345]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10 to CFE device /dev/media3 and ISP device /dev/media1 using PiSP variant BCM2712_C0
+Sep 03 20:43:07 raspberrypi uv[1364]: [0:35:19.577151179] [5331]  INFO Camera camera.cpp:1215 configuring streams: (0) 3280x2464-RGB888/sRGB (1) 3280x2464-SBGGR16/RAW
+Sep 03 20:43:07 raspberrypi uv[1364]: [0:35:19.577416123] [5345]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10 - Selected sensor format: 3280x2464-SBGGR10_1X10/RAW - Selected CFE format: 3280x2464-BYR2/RAW
+Sep 03 20:43:07 raspberrypi uv[1364]: [0:35:19.609472549] [5331]  INFO Camera camera.cpp:1215 configuring streams: (0) 3280x2464-RGB888/sRGB (1) 3280x2464-SBGGR16/RAW
+Sep 03 20:43:07 raspberrypi uv[1364]: [0:35:19.609709697] [5345]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10 - Selected sensor format: 3280x2464-SBGGR10_1X10/RAW - Selected CFE format: 3280x2464-BYR2/RAW
+Sep 03 20:43:07 raspberrypi kernel: rp1-cfe 1f00110000.csi: Using a link rate of 912 Mbps
+Sep 03 20:43:08 raspberrypi kernel: rp1-cfe 1f00128000.csi: Using a link rate of 912 Mbps
+Sep 03 20:43:10 raspberrypi go[1502]: 2025/09/03 20:43:10 Error occured on scp: connect: dial tcp 10.193.141.194:22: connect: no route to host
+Sep 03 20:43:11 raspberrypi uv[1364]: [0:35:23.020129658] [5353]  INFO Camera camera_manager.cpp:330 libcamera v0.5.2+99-bfd68f78
+Sep 03 20:43:11 raspberrypi uv[1364]: [0:35:23.031623880] [5355]  INFO RPI pisp.cpp:720 libpisp version 1.3.0
+Sep 03 20:43:11 raspberrypi uv[1364]: [0:35:23.033907066] [5355]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx219.json
+Sep 03 20:43:11 raspberrypi uv[1364]: [0:35:23.041112566] [5355]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10' for pipeline handler rpi/pisp
+Sep 03 20:43:11 raspberrypi uv[1364]: [0:35:23.041131362] [5355]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10 to CFE device /dev/media2 and ISP device /dev/media0 using PiSP variant BCM2712_C0
+Sep 03 20:43:11 raspberrypi uv[1364]: [0:35:23.041176714] [5355]  INFO RPI pisp.cpp:720 libpisp version 1.3.0
+Sep 03 20:43:11 raspberrypi uv[1364]: [0:35:23.042678492] [5355]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx219.json
+Sep 03 20:43:11 raspberrypi uv[1364]: [0:35:23.049816510] [5355]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10' for pipeline handler rpi/pisp
+Sep 03 20:43:11 raspberrypi uv[1364]: [0:35:23.049834751] [5355]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10 to CFE device /dev/media3 and ISP device /dev/media1 using PiSP variant BCM2712_C0
+Sep 03 20:43:11 raspberrypi uv[1364]: [0:35:23.052373751] [5353]  INFO Camera camera.cpp:1215 configuring streams: (0) 3280x2464-RGB888/sRGB (1) 3280x2464-SBGGR16/RAW
+Sep 03 20:43:11 raspberrypi uv[1364]: [0:35:23.052474899] [5355]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10 - Selected sensor format: 3280x2464-SBGGR10_1X10/RAW - Selected CFE format: 3280x2464-BYR2/RAW
+Sep 03 20:43:11 raspberrypi uv[1364]: [0:35:23.070336973] [5353]  INFO Camera camera.cpp:1215 configuring streams: (0) 3280x2464-RGB888/sRGB (1) 3280x2464-SBGGR16/RAW
+Sep 03 20:43:11 raspberrypi uv[1364]: [0:35:23.070445158] [5355]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10 - Selected sensor format: 3280x2464-SBGGR10_1X10/RAW - Selected CFE format: 3280x2464-BYR2/RAW
+Sep 03 20:43:11 raspberrypi kernel: rp1-cfe 1f00110000.csi: Using a link rate of 912 Mbps
+Sep 03 20:43:11 raspberrypi kernel: rp1-cfe 1f00128000.csi: Using a link rate of 912 Mbps
+Sep 03 20:43:12 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Scheduled restart job, restart counter is at 236.
+Sep 03 20:43:12 raspberrypi systemd[1117]: Starting rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect...
+Sep 03 20:43:12 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Control process exited, code=exited, status=1/FAILURE
+Sep 03 20:43:12 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Failed with result 'exit-code'.
+Sep 03 20:43:12 raspberrypi systemd[1117]: Failed to start rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect.
+Sep 03 20:43:18 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Scheduled restart job, restart counter is at 237.
+Sep 03 20:43:18 raspberrypi systemd[1117]: Starting rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect...
+Sep 03 20:43:18 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Control process exited, code=exited, status=1/FAILURE
+Sep 03 20:43:18 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Failed with result 'exit-code'.
+Sep 03 20:43:18 raspberrypi systemd[1117]: Failed to start rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect.
+Sep 03 20:43:21 raspberrypi uv[1364]: [0:35:33.067321874] [5363]  INFO Camera camera_manager.cpp:330 libcamera v0.5.2+99-bfd68f78
+Sep 03 20:43:21 raspberrypi uv[1364]: [0:35:33.078876597] [5375]  INFO RPI pisp.cpp:720 libpisp version 1.3.0
+Sep 03 20:43:21 raspberrypi uv[1364]: [0:35:33.081139078] [5375]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx219.json
+Sep 03 20:43:21 raspberrypi uv[1364]: [0:35:33.088217523] [5375]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10' for pipeline handler rpi/pisp
+Sep 03 20:43:21 raspberrypi uv[1364]: [0:35:33.088238134] [5375]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10 to CFE device /dev/media2 and ISP device /dev/media0 using PiSP variant BCM2712_C0
+Sep 03 20:43:21 raspberrypi uv[1364]: [0:35:33.088282356] [5375]  INFO RPI pisp.cpp:720 libpisp version 1.3.0
+Sep 03 20:43:21 raspberrypi uv[1364]: [0:35:33.089780597] [5375]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx219.json
+Sep 03 20:43:21 raspberrypi uv[1364]: [0:35:33.096957226] [5375]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10' for pipeline handler rpi/pisp
+Sep 03 20:43:21 raspberrypi uv[1364]: [0:35:33.096977411] [5375]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10 to CFE device /dev/media3 and ISP device /dev/media1 using PiSP variant BCM2712_C0
+Sep 03 20:43:21 raspberrypi uv[1364]: [0:35:33.099506615] [5363]  INFO Camera camera.cpp:1215 configuring streams: (0) 3280x2464-RGB888/sRGB (1) 3280x2464-SBGGR16/RAW
+Sep 03 20:43:21 raspberrypi uv[1364]: [0:35:33.099604171] [5375]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10 - Selected sensor format: 3280x2464-SBGGR10_1X10/RAW - Selected CFE format: 3280x2464-BYR2/RAW
+Sep 03 20:43:21 raspberrypi uv[1364]: [0:35:33.118208708] [5363]  INFO Camera camera.cpp:1215 configuring streams: (0) 3280x2464-RGB888/sRGB (1) 3280x2464-SBGGR16/RAW
+Sep 03 20:43:21 raspberrypi uv[1364]: [0:35:33.118318874] [5375]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10 - Selected sensor format: 3280x2464-SBGGR10_1X10/RAW - Selected CFE format: 3280x2464-BYR2/RAW
+Sep 03 20:43:21 raspberrypi kernel: rp1-cfe 1f00110000.csi: Using a link rate of 912 Mbps
+Sep 03 20:43:21 raspberrypi kernel: rp1-cfe 1f00128000.csi: Using a link rate of 912 Mbps
+Sep 03 20:43:22 raspberrypi go[1502]: 2025/09/03 20:43:22 Error occured on scp: connect: dial tcp 10.193.141.194:22: connect: no route to host
+Sep 03 20:43:23 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Scheduled restart job, restart counter is at 238.
+Sep 03 20:43:23 raspberrypi systemd[1117]: Starting rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect...
+Sep 03 20:43:23 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Control process exited, code=exited, status=1/FAILURE
+Sep 03 20:43:23 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Failed with result 'exit-code'.
+Sep 03 20:43:23 raspberrypi systemd[1117]: Failed to start rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect.
+Sep 03 20:43:28 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Scheduled restart job, restart counter is at 239.
+Sep 03 20:43:28 raspberrypi systemd[1117]: Starting rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect...
+Sep 03 20:43:28 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Control process exited, code=exited, status=1/FAILURE
+Sep 03 20:43:28 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Failed with result 'exit-code'.
+Sep 03 20:43:28 raspberrypi systemd[1117]: Failed to start rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect.
+Sep 03 20:43:30 raspberrypi go[1502]: 2025/09/03 20:43:30 Error occured on scp: connect: dial tcp 10.193.141.194:22: connect: no route to host
+Sep 03 20:43:32 raspberrypi uv[1364]: [0:35:44.652047571] [5383]  INFO Camera camera_manager.cpp:330 libcamera v0.5.2+99-bfd68f78
+Sep 03 20:43:32 raspberrypi uv[1364]: [0:35:44.663563979] [5394]  INFO RPI pisp.cpp:720 libpisp version 1.3.0
+Sep 03 20:43:32 raspberrypi uv[1364]: [0:35:44.665803664] [5394]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx219.json
+Sep 03 20:43:32 raspberrypi uv[1364]: [0:35:44.673029090] [5394]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10' for pipeline handler rpi/pisp
+Sep 03 20:43:32 raspberrypi uv[1364]: [0:35:44.673050108] [5394]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10 to CFE device /dev/media2 and ISP device /dev/media0 using PiSP variant BCM2712_C0
+Sep 03 20:43:32 raspberrypi uv[1364]: [0:35:44.673093868] [5394]  INFO RPI pisp.cpp:720 libpisp version 1.3.0
+Sep 03 20:43:32 raspberrypi uv[1364]: [0:35:44.674599960] [5394]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx219.json
+Sep 03 20:43:32 raspberrypi uv[1364]: [0:35:44.681709275] [5394]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10' for pipeline handler rpi/pisp
+Sep 03 20:43:32 raspberrypi uv[1364]: [0:35:44.681728682] [5394]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10 to CFE device /dev/media3 and ISP device /dev/media1 using PiSP variant BCM2712_C0
+Sep 03 20:43:32 raspberrypi uv[1364]: [0:35:44.684294979] [5383]  INFO Camera camera.cpp:1215 configuring streams: (0) 3280x2464-RGB888/sRGB (1) 3280x2464-SBGGR16/RAW
+Sep 03 20:43:32 raspberrypi uv[1364]: [0:35:44.684393349] [5394]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10 - Selected sensor format: 3280x2464-SBGGR10_1X10/RAW - Selected CFE format: 3280x2464-BYR2/RAW
+Sep 03 20:43:32 raspberrypi uv[1364]: [0:35:44.702848775] [5383]  INFO Camera camera.cpp:1215 configuring streams: (0) 3280x2464-RGB888/sRGB (1) 3280x2464-SBGGR16/RAW
+Sep 03 20:43:32 raspberrypi uv[1364]: [0:35:44.702960479] [5394]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10 - Selected sensor format: 3280x2464-SBGGR10_1X10/RAW - Selected CFE format: 3280x2464-BYR2/RAW
+Sep 03 20:43:33 raspberrypi kernel: rp1-cfe 1f00110000.csi: Using a link rate of 912 Mbps
+Sep 03 20:43:33 raspberrypi kernel: rp1-cfe 1f00128000.csi: Using a link rate of 912 Mbps
+Sep 03 20:43:33 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Scheduled restart job, restart counter is at 240.
+Sep 03 20:43:33 raspberrypi systemd[1117]: Starting rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect...
+Sep 03 20:43:33 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Control process exited, code=exited, status=1/FAILURE
+Sep 03 20:43:33 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Failed with result 'exit-code'.
+Sep 03 20:43:33 raspberrypi systemd[1117]: Failed to start rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect.
+Sep 03 20:43:36 raspberrypi uv[1364]: [0:35:48.139952754] [5402]  INFO Camera camera_manager.cpp:330 libcamera v0.5.2+99-bfd68f78
+Sep 03 20:43:36 raspberrypi uv[1364]: [0:35:48.151501088] [5408]  INFO RPI pisp.cpp:720 libpisp version 1.3.0
+Sep 03 20:43:36 raspberrypi uv[1364]: [0:35:48.153756291] [5408]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx219.json
+Sep 03 20:43:36 raspberrypi uv[1364]: [0:35:48.160914588] [5408]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10' for pipeline handler rpi/pisp
+Sep 03 20:43:36 raspberrypi uv[1364]: [0:35:48.160933384] [5408]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10 to CFE device /dev/media2 and ISP device /dev/media0 using PiSP variant BCM2712_C0
+Sep 03 20:43:36 raspberrypi uv[1364]: [0:35:48.160977014] [5408]  INFO RPI pisp.cpp:720 libpisp version 1.3.0
+Sep 03 20:43:36 raspberrypi uv[1364]: [0:35:48.162479940] [5408]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx219.json
+Sep 03 20:43:36 raspberrypi uv[1364]: [0:35:48.169663310] [5408]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10' for pipeline handler rpi/pisp
+Sep 03 20:43:36 raspberrypi uv[1364]: [0:35:48.169682606] [5408]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10 to CFE device /dev/media3 and ISP device /dev/media1 using PiSP variant BCM2712_C0
+Sep 03 20:43:36 raspberrypi uv[1364]: [0:35:48.172225736] [5402]  INFO Camera camera.cpp:1215 configuring streams: (0) 3280x2464-RGB888/sRGB (1) 3280x2464-SBGGR16/RAW
+Sep 03 20:43:36 raspberrypi uv[1364]: [0:35:48.172325088] [5408]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10 - Selected sensor format: 3280x2464-SBGGR10_1X10/RAW - Selected CFE format: 3280x2464-BYR2/RAW
+Sep 03 20:43:36 raspberrypi uv[1364]: [0:35:48.190628754] [5402]  INFO Camera camera.cpp:1215 configuring streams: (0) 3280x2464-RGB888/sRGB (1) 3280x2464-SBGGR16/RAW
+Sep 03 20:43:36 raspberrypi uv[1364]: [0:35:48.190729828] [5408]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10 - Selected sensor format: 3280x2464-SBGGR10_1X10/RAW - Selected CFE format: 3280x2464-BYR2/RAW
+Sep 03 20:43:36 raspberrypi kernel: rp1-cfe 1f00110000.csi: Using a link rate of 912 Mbps
+Sep 03 20:43:36 raspberrypi kernel: rp1-cfe 1f00128000.csi: Using a link rate of 912 Mbps
+Sep 03 20:43:38 raspberrypi go[1502]: 2025/09/03 20:43:38 Error occured on scp: connect: dial tcp 10.193.141.194:22: connect: no route to host
+Sep 03 20:43:39 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Scheduled restart job, restart counter is at 241.
+Sep 03 20:43:39 raspberrypi systemd[1117]: Starting rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect...
+Sep 03 20:43:39 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Control process exited, code=exited, status=1/FAILURE
+Sep 03 20:43:39 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Failed with result 'exit-code'.
+Sep 03 20:43:39 raspberrypi systemd[1117]: Failed to start rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect.
+Sep 03 20:43:44 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Scheduled restart job, restart counter is at 242.
+Sep 03 20:43:44 raspberrypi systemd[1117]: Starting rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect...
+Sep 03 20:43:44 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Control process exited, code=exited, status=1/FAILURE
+Sep 03 20:43:44 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Failed with result 'exit-code'.
+Sep 03 20:43:44 raspberrypi systemd[1117]: Failed to start rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect.
+Sep 03 20:43:44 raspberrypi uv[1364]: [0:35:56.574855472] [5416]  INFO Camera camera_manager.cpp:330 libcamera v0.5.2+99-bfd68f78
+Sep 03 20:43:44 raspberrypi uv[1364]: [0:35:56.586813601] [5426]  INFO RPI pisp.cpp:720 libpisp version 1.3.0
+Sep 03 20:43:44 raspberrypi uv[1364]: [0:35:56.589057601] [5426]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx219.json
+Sep 03 20:43:44 raspberrypi uv[1364]: [0:35:56.596290712] [5426]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10' for pipeline handler rpi/pisp
+Sep 03 20:43:44 raspberrypi uv[1364]: [0:35:56.596312120] [5426]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10 to CFE device /dev/media2 and ISP device /dev/media0 using PiSP variant BCM2712_C0
+Sep 03 20:43:44 raspberrypi uv[1364]: [0:35:56.596355860] [5426]  INFO RPI pisp.cpp:720 libpisp version 1.3.0
+Sep 03 20:43:44 raspberrypi uv[1364]: [0:35:56.597853953] [5426]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx219.json
+Sep 03 20:43:44 raspberrypi uv[1364]: [0:35:56.605013712] [5426]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10' for pipeline handler rpi/pisp
+Sep 03 20:43:44 raspberrypi uv[1364]: [0:35:56.605032972] [5426]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10 to CFE device /dev/media3 and ISP device /dev/media1 using PiSP variant BCM2712_C0
+Sep 03 20:43:44 raspberrypi uv[1364]: [0:35:56.607531879] [5416]  INFO Camera camera.cpp:1215 configuring streams: (0) 3280x2464-RGB888/sRGB (1) 3280x2464-SBGGR16/RAW
+Sep 03 20:43:44 raspberrypi uv[1364]: [0:35:56.607631805] [5426]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10 - Selected sensor format: 3280x2464-SBGGR10_1X10/RAW - Selected CFE format: 3280x2464-BYR2/RAW
+Sep 03 20:43:44 raspberrypi uv[1364]: [0:35:56.626096064] [5416]  INFO Camera camera.cpp:1215 configuring streams: (0) 3280x2464-RGB888/sRGB (1) 3280x2464-SBGGR16/RAW
+Sep 03 20:43:44 raspberrypi uv[1364]: [0:35:56.626207638] [5426]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10 - Selected sensor format: 3280x2464-SBGGR10_1X10/RAW - Selected CFE format: 3280x2464-BYR2/RAW
+Sep 03 20:43:44 raspberrypi kernel: rp1-cfe 1f00110000.csi: Using a link rate of 912 Mbps
+Sep 03 20:43:45 raspberrypi kernel: rp1-cfe 1f00128000.csi: Using a link rate of 912 Mbps
+Sep 03 20:43:46 raspberrypi go[1502]: 2025/09/03 20:43:46 Error occured on scp: connect: dial tcp 10.193.141.194:22: connect: no route to host
+Sep 03 20:43:49 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Scheduled restart job, restart counter is at 243.
+Sep 03 20:43:49 raspberrypi systemd[1117]: Starting rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect...
+Sep 03 20:43:49 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Control process exited, code=exited, status=1/FAILURE
+Sep 03 20:43:49 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Failed with result 'exit-code'.
+Sep 03 20:43:49 raspberrypi systemd[1117]: Failed to start rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect.
+Sep 03 20:43:51 raspberrypi uv[1364]: [0:36:03.405815930] [5434]  INFO Camera camera_manager.cpp:330 libcamera v0.5.2+99-bfd68f78
+Sep 03 20:43:51 raspberrypi uv[1364]: [0:36:03.423779356] [5440]  INFO RPI pisp.cpp:720 libpisp version 1.3.0
+Sep 03 20:43:51 raspberrypi uv[1364]: [0:36:03.427072597] [5440]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx219.json
+Sep 03 20:43:51 raspberrypi uv[1364]: [0:36:03.438034005] [5440]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10' for pipeline handler rpi/pisp
+Sep 03 20:43:51 raspberrypi uv[1364]: [0:36:03.438059893] [5440]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10 to CFE device /dev/media2 and ISP device /dev/media0 using PiSP variant BCM2712_C0
+Sep 03 20:43:51 raspberrypi uv[1364]: [0:36:03.438120393] [5440]  INFO RPI pisp.cpp:720 libpisp version 1.3.0
+Sep 03 20:43:51 raspberrypi uv[1364]: [0:36:03.440426653] [5440]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx219.json
+Sep 03 20:43:51 raspberrypi uv[1364]: [0:36:03.451320430] [5440]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10' for pipeline handler rpi/pisp
+Sep 03 20:43:51 raspberrypi uv[1364]: [0:36:03.451344319] [5440]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10 to CFE device /dev/media3 and ISP device /dev/media1 using PiSP variant BCM2712_C0
+Sep 03 20:43:51 raspberrypi uv[1364]: [0:36:03.455039745] [5434]  INFO Camera camera.cpp:1215 configuring streams: (0) 3280x2464-RGB888/sRGB (1) 3280x2464-SBGGR16/RAW
+Sep 03 20:43:51 raspberrypi uv[1364]: [0:36:03.455171282] [5440]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10 - Selected sensor format: 3280x2464-SBGGR10_1X10/RAW - Selected CFE format: 3280x2464-BYR2/RAW
+Sep 03 20:43:51 raspberrypi uv[1364]: [0:36:03.476405764] [5434]  INFO Camera camera.cpp:1215 configuring streams: (0) 3280x2464-RGB888/sRGB (1) 3280x2464-SBGGR16/RAW
+Sep 03 20:43:51 raspberrypi uv[1364]: [0:36:03.476544375] [5440]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10 - Selected sensor format: 3280x2464-SBGGR10_1X10/RAW - Selected CFE format: 3280x2464-BYR2/RAW
+Sep 03 20:43:51 raspberrypi kernel: rp1-cfe 1f00110000.csi: Using a link rate of 912 Mbps
+Sep 03 20:43:51 raspberrypi kernel: rp1-cfe 1f00128000.csi: Using a link rate of 912 Mbps
+Sep 03 20:43:54 raspberrypi go[1502]: 2025/09/03 20:43:54 Error occured on scp: connect: dial tcp 10.193.141.194:22: connect: no route to host
+Sep 03 20:43:54 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Scheduled restart job, restart counter is at 244.
+Sep 03 20:43:54 raspberrypi systemd[1117]: Starting rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect...
+Sep 03 20:43:54 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Control process exited, code=exited, status=1/FAILURE
+Sep 03 20:43:54 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Failed with result 'exit-code'.
+Sep 03 20:43:54 raspberrypi systemd[1117]: Failed to start rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect.
+Sep 03 20:44:00 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Scheduled restart job, restart counter is at 245.
+Sep 03 20:44:00 raspberrypi systemd[1117]: Starting rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect...
+Sep 03 20:44:00 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Control process exited, code=exited, status=1/FAILURE
+Sep 03 20:44:00 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Failed with result 'exit-code'.
+Sep 03 20:44:00 raspberrypi systemd[1117]: Failed to start rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect.
+Sep 03 20:44:00 raspberrypi uv[1364]: [0:36:12.311966018] [5448]  INFO Camera camera_manager.cpp:330 libcamera v0.5.2+99-bfd68f78
+Sep 03 20:44:00 raspberrypi uv[1364]: [0:36:12.327087740] [5458]  INFO RPI pisp.cpp:720 libpisp version 1.3.0
+Sep 03 20:44:00 raspberrypi uv[1364]: [0:36:12.329429258] [5458]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx219.json
+Sep 03 20:44:00 raspberrypi uv[1364]: [0:36:12.337480073] [5458]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10' for pipeline handler rpi/pisp
+Sep 03 20:44:00 raspberrypi uv[1364]: [0:36:12.337522333] [5458]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10 to CFE device /dev/media2 and ISP device /dev/media0 using PiSP variant BCM2712_C0
+Sep 03 20:44:00 raspberrypi uv[1364]: [0:36:12.337587629] [5458]  INFO RPI pisp.cpp:720 libpisp version 1.3.0
+Sep 03 20:44:00 raspberrypi uv[1364]: [0:36:12.339419462] [5458]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx219.json
+Sep 03 20:44:00 raspberrypi uv[1364]: [0:36:12.346750740] [5458]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10' for pipeline handler rpi/pisp
+Sep 03 20:44:00 raspberrypi uv[1364]: [0:36:12.346771092] [5458]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10 to CFE device /dev/media3 and ISP device /dev/media1 using PiSP variant BCM2712_C0
+Sep 03 20:44:00 raspberrypi uv[1364]: [0:36:12.349299721] [5448]  INFO Camera camera.cpp:1215 configuring streams: (0) 3280x2464-RGB888/sRGB (1) 3280x2464-SBGGR16/RAW
+Sep 03 20:44:00 raspberrypi uv[1364]: [0:36:12.349396740] [5458]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@88000/imx219@10 - Selected sensor format: 3280x2464-SBGGR10_1X10/RAW - Selected CFE format: 3280x2464-BYR2/RAW
+Sep 03 20:44:00 raspberrypi uv[1364]: [0:36:12.367575555] [5448]  INFO Camera camera.cpp:1215 configuring streams: (0) 3280x2464-RGB888/sRGB (1) 3280x2464-SBGGR16/RAW
+Sep 03 20:44:00 raspberrypi uv[1364]: [0:36:12.367683314] [5458]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10 - Selected sensor format: 3280x2464-SBGGR10_1X10/RAW - Selected CFE format: 3280x2464-BYR2/RAW
+Sep 03 20:44:00 raspberrypi kernel: rp1-cfe 1f00110000.csi: Using a link rate of 912 Mbps
+Sep 03 20:44:00 raspberrypi kernel: rp1-cfe 1f00128000.csi: Using a link rate of 912 Mbps
+Sep 03 20:44:02 raspberrypi go[1502]: 2025/09/03 20:44:02 Error occured on scp: connect: dial tcp 10.193.141.194:22: connect: no route to host
+Sep 03 20:44:05 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Scheduled restart job, restart counter is at 246.
+Sep 03 20:44:05 raspberrypi systemd[1117]: Starting rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect...
+Sep 03 20:44:05 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Control process exited, code=exited, status=1/FAILURE
+Sep 03 20:44:05 raspberrypi systemd[1117]: rpi-connect-wayvnc.service: Failed with result 'exit-code'.
+Sep 03 20:44:05 raspberrypi systemd[1117]: Failed to start rpi-connect-wayvnc.service - WayVNC process used by Raspberry Pi Connect.
+^C
