@@ -5,8 +5,11 @@ Template for team repo
 <img src="./images/thisismyteam.png" width="50%">
 </p>
 <p align="center">
-This is my team
+AgroDrone
 </p>
+
+## Project Description
+Development of an autonomous, low-cost drone system tailored for small to medium sized farmers. The system will be equipped with GPS and imaging. The drone will conduct scheduled flights to capture high resolution footage of agricultural land, transmitting it to an edge processing device upon returning from the flight. Machine learning algorithms will reveal insights such as vegetation health or soil condition changes. Predictive metric will be visualized with an intuitive UI to dictate long-term land and crop management. 
 
 ## Team links
 - [Team Google Drive]()
