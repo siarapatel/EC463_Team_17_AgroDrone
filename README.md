@@ -2,7 +2,7 @@
 Template for team repo
 
 <p align="center">
-<img src="./images/thisismyteam.png" width="50%">
+<img src="./images/Team17.jpg" width="50%">
 </p>
 <p align="center">
 AgroDrone
