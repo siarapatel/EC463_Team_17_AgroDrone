@@ -1,6 +1,4 @@
-# Scripts
-
-## File Transfer Watcher
+# File Transfer Watcher
 
 Automatically transfers from local `~/export` directory to remote's `~/ingest`
 directory.

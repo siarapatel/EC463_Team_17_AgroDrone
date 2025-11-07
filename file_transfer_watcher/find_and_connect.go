@@ -3,13 +3,8 @@ package main
 import (
 	"bufio"
 	"log"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
-	"time"
-
-	"github.com/povsister/scp"
 )
 
 // Searches for WiFi AP and attempts to connect to it
@@ -64,63 +59,3 @@ func findAndConnect(ssid string, remotePassword string) bool {
 }
 
 func checkIfConnected(_ string) bool { return false }
-
-func main() {
-	log.Println("Starting application")
-	// TODO: Don't hardcode
-	ssid := "pi4"
-	remoteUser := "sr-design"
-	remotePassword := "EC463"
-	ip := "10.42.0.1"
-	exportDir := filepath.Join(os.Getenv("HOME"), "export")
-	ingestDir := filepath.Join("/", "home", remoteUser, "ingest")
-	for {
-		// should check if connected first to not spam connection attempts
-		res := checkIfConnected(ssid)
-		if !res {
-			res = findAndConnect(ssid, "passyword")
-			log.Println("Found network:", res)
-			if !res {
-				// if didn't find a network, sleep, then skip to the next iteration to
-				// not run the transfer stuff when not connected
-				time.Sleep(5 * time.Second)
-				continue
-			}
-		}
-		// now transfer files
-		sshConf := scp.NewSSHConfigFromPassword(remoteUser, remotePassword)
-		scpClient, err := scp.NewClient(ip, sshConf, &scp.ClientOption{})
-		if err != nil {
-			log.Printf("Failed to connect to server %v", err)
-			time.Sleep(5 * time.Second)
-			continue
-		}
-		log.Println("Transferring files...")
-		do := &scp.DirTransferOption{
-			ContentOnly: true,
-		}
-		err = scpClient.CopyDirToRemote(exportDir, ingestDir, do)
-		if err != nil {
-			log.Printf("Failed to transfer files %v", err)
-			time.Sleep(5 * time.Second)
-			continue
-		}
-		log.Println("Transfer complete")
-
-		// And delete
-		log.Println("Deleteing local files")
-		entries, err := os.ReadDir(exportDir)
-		if err != nil {
-			log.Printf("Failed to delete %v", err)
-			time.Sleep(5 * time.Second)
-			continue
-		}
-		for _, e := range entries {
-			os.RemoveAll(filepath.Join(exportDir, e.Name()))
-		}
-
-		// if files transferred, do a bigger timeout
-		log.Println("Sleeping for a bit")
-		time.Sleep(5 * time.Minute)
-	}
-}
