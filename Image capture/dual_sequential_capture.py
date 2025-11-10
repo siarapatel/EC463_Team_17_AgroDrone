@@ -117,71 +117,85 @@ def init_camera(cam_num: int, exposure_time: int, analogue_gain: float):
     return picam
 
 
-def capture_from_camera(picam: Picamera2, cam_num: int, timestamp: str, outdir: str):
+def capture_from_camera(picam: Picamera2, cam_num: int, timestamp: str, outdir: str, 
+                       burst_count: int = 5, jpeg_quality: int = 90):
     """
-    Capture RAW and RGB888 images from a single camera.
+    Capture RAW and RGB888 images from a single camera with burst mode.
     
     Args:
         picam: Configured Picamera2 instance
         cam_num: Camera number (0 or 1)
         timestamp: Timestamp string for filenames
         outdir: Output directory path
+        burst_count: Number of consecutive frames to capture
+        jpeg_quality: JPEG quality for RGB images (1-100)
     
     Returns:
-        Dictionary containing capture metadata
+        Dictionary containing capture metadata for all burst captures
     """
-    # Capture both streams atomically using a request
-    # This ensures main and raw come from the same frame
-    request = picam.capture_request()
-    try:
-        # Extract arrays from both streams
-        rgb_array = request.make_array("main")
-        raw_array = request.make_array("raw")
+    burst_captures = []
+    
+    print(f"  Capturing {burst_count} burst frames...")
+    
+    for burst_idx in range(burst_count):
+        # Capture both streams atomically using a request
+        # This ensures main and raw come from the same frame
+        request = picam.capture_request()
+        try:
+            # Extract arrays from both streams
+            rgb_array = request.make_array("main")
+            raw_array = request.make_array("raw")
+            
+            # Get metadata from the request
+            metadata = request.get_metadata()
+        finally:
+            # Always release the request to free buffers
+            request.release()
         
-        # Get metadata from the request
-        metadata = request.get_metadata()
-    finally:
-        # Always release the request to free buffers
-        request.release()
+        # Generate filenames with burst index
+        base_name = f"{timestamp}_cam{cam_num}_burst{burst_idx:02d}"
+        rgb_path = os.path.join(outdir, f"{base_name}_rgb.jpg")
+        raw_path = os.path.join(outdir, f"{base_name}_raw.npy")
+        
+        # Save RGB888 as JPEG (much faster than PNG)
+        rgb_image = Image.fromarray(rgb_array, mode='RGB')
+        rgb_image.save(rgb_path, format='JPEG', quality=jpeg_quality, optimize=False)
+        
+        # Save RAW as numpy array
+        np.save(raw_path, raw_array)
+        
+        # Prepare metadata for this capture
+        capture_info = {
+            "burst_index": burst_idx,
+            "rgb_path": rgb_path,
+            "raw_path": raw_path,
+            "rgb_shape": list(rgb_array.shape),
+            "raw_shape": list(raw_array.shape),
+            "raw_dtype": str(raw_array.dtype),
+            "metadata": {
+                "ExposureTime": metadata.get("ExposureTime"),
+                "AnalogueGain": metadata.get("AnalogueGain"),
+                "ColourGains": metadata.get("ColourGains"),
+                "SensorTimestamp": metadata.get("SensorTimestamp"),
+            }
+        }
+        
+        burst_captures.append(capture_info)
+        print(f"    [{burst_idx + 1}/{burst_count}] Captured - SensorTimestamp: {metadata.get('SensorTimestamp')}")
     
-    # Generate filenames
-    base_name = f"{timestamp}_cam{cam_num}"
-    rgb_path = os.path.join(outdir, f"{base_name}_rgb.png")
-    raw_path = os.path.join(outdir, f"{base_name}_raw.npy")
-    
-    # Save RGB888 as PNG
-    rgb_image = Image.fromarray(rgb_array, mode='RGB')
-    rgb_image.save(rgb_path, format='PNG')
-    
-    # Save RAW as numpy array
-    np.save(raw_path, raw_array)
-    
-    # Prepare metadata for this capture
-    capture_info = {
+    # Return consolidated info
+    return {
         "camera_index": cam_num,
         "timestamp": timestamp,
-        "rgb_path": rgb_path,
-        "raw_path": raw_path,
-        "rgb_shape": rgb_array.shape,
-        "raw_shape": raw_array.shape,
-        "raw_dtype": str(raw_array.dtype),
-        "metadata": {
-            "ExposureTime": metadata.get("ExposureTime"),
-            "AnalogueGain": metadata.get("AnalogueGain"),
-            "ColourGains": metadata.get("ColourGains"),
-            "SensorTimestamp": metadata.get("SensorTimestamp"),
-        }
+        "burst_count": burst_count,
+        "jpeg_quality": jpeg_quality,
+        "burst_captures": burst_captures
     }
-    
-    print(f"Camera {cam_num} captured:")
-    print(f"  - RGB888: {rgb_path} {rgb_array.shape}")
-    print(f"  - RAW: {raw_path} {raw_array.shape} dtype={raw_array.dtype}")
-    
-    return capture_info
 
 
 def sequential_capture_cycle(picam0: Picamera2, picam1: Picamera2, 
-                             outdir: str, save_metadata: bool = True):
+                             outdir: str, burst_count: int = 5, jpeg_quality: int = 90,
+                             save_metadata: bool = True):
     """
     Perform one complete capture cycle from both cameras sequentially.
     
@@ -189,6 +203,8 @@ def sequential_capture_cycle(picam0: Picamera2, picam1: Picamera2,
         picam0: Camera 0 instance
         picam1: Camera 1 instance
         outdir: Output directory
+        burst_count: Number of burst captures per camera
+        jpeg_quality: JPEG quality for RGB images
         save_metadata: Whether to save JSON metadata file
     
     Returns:
@@ -201,33 +217,37 @@ def sequential_capture_cycle(picam0: Picamera2, picam1: Picamera2,
     print(f"Starting capture cycle: {timestamp}")
     print(f"{'='*60}")
     
-    # Capture from Camera 0
+    # Capture from Camera 0 (with burst)
     print("\n[1/2] Capturing from Camera 0...")
     start_cam0 = time.time()
-    cam0_info = capture_from_camera(picam0, 0, timestamp, outdir)
+    cam0_info = capture_from_camera(picam0, 0, timestamp, outdir, burst_count, jpeg_quality)
     cam0_duration = time.time() - start_cam0
     
     # Capture from Camera 1 (immediately after Camera 0 completes)
     print("\n[2/2] Capturing from Camera 1...")
     start_cam1 = time.time()
-    cam1_info = capture_from_camera(picam1, 1, timestamp, outdir)
+    cam1_info = capture_from_camera(picam1, 1, timestamp, outdir, burst_count, jpeg_quality)
     cam1_duration = time.time() - start_cam1
     
     # Calculate inter-camera delay
     inter_camera_delay = start_cam1 - start_cam0
     
     print(f"\nTiming:")
-    print(f"  - Camera 0 capture time: {cam0_duration:.3f}s")
-    print(f"  - Camera 1 capture time: {cam1_duration:.3f}s")
+    print(f"  - Camera 0 total time ({burst_count} frames): {cam0_duration:.3f}s ({cam0_duration/burst_count:.3f}s per frame)")
+    print(f"  - Camera 1 total time ({burst_count} frames): {cam1_duration:.3f}s ({cam1_duration/burst_count:.3f}s per frame)")
     print(f"  - Inter-camera delay: {inter_camera_delay:.3f}s")
     
     # Save metadata JSON if requested
     if save_metadata:
         metadata_dict = {
             "capture_timestamp": timestamp,
+            "burst_count": burst_count,
+            "jpeg_quality": jpeg_quality,
             "timing": {
                 "camera_0_duration_s": cam0_duration,
+                "camera_0_per_frame_s": cam0_duration / burst_count,
                 "camera_1_duration_s": cam1_duration,
+                "camera_1_per_frame_s": cam1_duration / burst_count,
                 "inter_camera_delay_s": inter_camera_delay
             },
             "camera_0": cam0_info,
@@ -302,6 +322,18 @@ RAM Disk Setup:
         action="store_true",
         help="Skip saving JSON metadata files"
     )
+    parser.add_argument(
+        "--burst",
+        type=int,
+        default=5,
+        help="Number of burst captures per camera (default: 5)"
+    )
+    parser.add_argument(
+        "--jpeg-quality",
+        type=int,
+        default=90,
+        help="JPEG quality for RGB images (1-100, default: 90)"
+    )
     
     args = parser.parse_args()
     
@@ -326,8 +358,10 @@ RAM Disk Setup:
         print(f"Mode: DIRECT WRITE")
         print(f"Output directory: {args.outdir}")
     print(f"Capture cycles: {args.count}")
+    print(f"Burst captures per camera: {args.burst}")
     print(f"Exposure: {args.exposure} µs")
     print(f"Gain: {args.gain}")
+    print(f"JPEG quality: {args.jpeg_quality}")
     print(f"Interval: {args.interval}s")
     print("="*60)
     
@@ -356,6 +390,8 @@ RAM Disk Setup:
                 picam0, 
                 picam1, 
                 working_dir,  # Write to ramdisk if specified, otherwise final dir
+                burst_count=args.burst,
+                jpeg_quality=args.jpeg_quality,
                 save_metadata=not args.no_metadata
             )
             
