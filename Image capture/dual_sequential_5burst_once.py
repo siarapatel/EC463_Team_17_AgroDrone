@@ -11,7 +11,6 @@ import json
 import pathlib
 import shutil
 from datetime import datetime, timezone
-from typing import Dict
 import numpy as np
 from PIL import Image
 from picamera2 import Picamera2
@@ -22,123 +21,13 @@ def ensure_dir(path: str):
     pathlib.Path(path).mkdir(parents=True, exist_ok=True)
 
 
-def get_ramdisk_usage(ramdisk_path: str) -> Dict:
-    """
-    Get RAM disk space usage information (similar to du -h and df -h).
-    
-    Args:
-        ramdisk_path: Path to RAM disk
-    
-    Returns:
-        Dictionary with usage statistics
-    """
-    # Get disk usage statistics (similar to df -h)
-    usage = shutil.disk_usage(ramdisk_path)
-    
-    # Calculate directory size (similar to du -h)
-    total_size = 0
-    file_count = 0
-    try:
-        for dirpath, dirnames, filenames in os.walk(ramdisk_path):
-            for filename in filenames:
-                filepath = os.path.join(dirpath, filename)
-                if os.path.isfile(filepath):
-                    total_size += os.path.getsize(filepath)
-                    file_count += 1
-    except Exception as e:
-        print(f"Warning: Could not calculate directory size: {e}")
-    
-    return {
-        'total_gb': usage.total / (1024**3),
-        'used_gb': usage.used / (1024**3),
-        'free_gb': usage.free / (1024**3),
-        'percent_used': (usage.used / usage.total * 100) if usage.total > 0 else 0,
-        'dir_size_mb': total_size / (1024**2),
-        'file_count': file_count
-    }
-
-
-def print_ramdisk_status(ramdisk_path: str, label: str = "RAM Disk Status"):
-    """
-    Print formatted RAM disk usage information.
-    
-    Args:
-        ramdisk_path: Path to RAM disk
-        label: Label for the status output
-    """
-    try:
-        stats = get_ramdisk_usage(ramdisk_path)
-        
-        print(f"\n{'='*60}")
-        print(f"{label}")
-        print(f"{'='*60}")
-        print(f"Total Size:      {stats['total_gb']:.2f} GB")
-        print(f"Used:            {stats['used_gb']:.2f} GB ({stats['percent_used']:.1f}%)")
-        print(f"Available:       {stats['free_gb']:.2f} GB")
-        print(f"Directory Size:  {stats['dir_size_mb']:.2f} MB ({stats['file_count']} files)")
-        print(f"{'='*60}")
-        
-    except Exception as e:
-        print(f"\n⚠ Could not get RAM disk status: {e}")
-
-
-def check_ramdisk_availability(ramdisk_path: str, flush_start_time: float, 
-                               check_at_second: float = 4.0) -> bool:
-    """
-    Check if RAM disk is ready after flush operation at specific time.
-    
-    Args:
-        ramdisk_path: Path to RAM disk
-        flush_start_time: Time when flush started (from time.time())
-        check_at_second: When to check (seconds after flush_start_time)
-    
-    Returns:
-        True if available, False otherwise
-    """
-    # Calculate how long to wait
-    elapsed = time.time() - flush_start_time
-    wait_time = max(0, check_at_second - elapsed)
-    
-    if wait_time > 0:
-        print(f"\nWaiting {wait_time:.1f}s until 4th second check...")
-        time.sleep(wait_time)
-    else:
-        print(f"\n4th second already passed (flush took {elapsed:.1f}s)")
-    
-    # Perform check (should complete within 1 second)
-    print("Checking RAM disk availability...")
-    check_start = time.time()
-    
-    try:
-        # Test write
-        test_file = os.path.join(ramdisk_path, ".ramdisk_test")
-        with open(test_file, 'w') as f:
-            f.write("test")
-        os.remove(test_file)
-        
-        # Show status
-        print_ramdisk_status(ramdisk_path, "RAM Disk Status (Post-Flush)")
-        
-        check_duration = time.time() - check_start
-        total_time = time.time() - flush_start_time
-        
-        print(f"✓ RAM disk ready (check took {check_duration:.2f}s, total {total_time:.1f}s)")
-        return True
-        
-    except Exception as e:
-        check_duration = time.time() - check_start
-        print(f"⚠ RAM disk not ready: {e} (check took {check_duration:.2f}s)")
-        return False
-
-
-def flush_ramdisk_to_storage(ramdisk_path: str, final_path: str, clear_ramdisk: bool = True):
+def flush_ramdisk_to_storage(ramdisk_path: str, final_path: str):
     """
     Copy all files from RAM disk to permanent storage.
     
     Args:
         ramdisk_path: Source directory (RAM disk)
         final_path: Destination directory (permanent storage)
-        clear_ramdisk: Whether to delete files from RAM disk after copy
     
     Returns:
         Tuple of (files_copied, total_bytes)
@@ -177,17 +66,6 @@ def flush_ramdisk_to_storage(ramdisk_path: str, final_path: str, clear_ramdisk: 
     print(f"  - Duration: {duration:.2f}s")
     print(f"  - Transfer speed: {speed_mbps:.2f} MB/s")
     print(f"{'='*60}")
-    
-    # Optional: Clear RAM disk after flush
-    if clear_ramdisk:
-        for item in os.listdir(ramdisk_path):
-            src = os.path.join(ramdisk_path, item)
-            if os.path.isfile(src):
-                try:
-                    os.remove(src)
-                except Exception as e:
-                    print(f"Warning: Could not remove {item}: {e}")
-        print("  ✓ RAM disk cleared")
     
     return files_copied, total_bytes
 
@@ -469,23 +347,18 @@ RAM Disk Setup:
     if use_ramdisk:
         ensure_dir(final_dir)  # Also ensure final destination exists
     
-    BURST_SETS = 5  # Fixed at 5 sets per cycle
-    
     print("="*60)
-    print("Dual IMX219 Sequential Capture with Incremental Flush")
+    print("Dual IMX219 Sequential Capture")
     print("="*60)
     if use_ramdisk:
-        print(f"Mode: RAM DISK (high-speed with incremental flush)")
+        print(f"Mode: RAM DISK (high-speed)")
         print(f"Working directory: {working_dir}")
         print(f"Final directory: {final_dir}")
     else:
         print(f"Mode: DIRECT WRITE")
         print(f"Output directory: {args.outdir}")
     print(f"Capture cycles: {args.count}")
-    print(f"Burst sets per cycle: {BURST_SETS}")
-    print(f"Burst captures per set: {args.burst}")
-    print(f"Images per burst set: {args.burst * 4} ({args.burst * 2} per camera)")
-    print(f"Total images per cycle: {BURST_SETS * args.burst * 4}")
+    print(f"Burst captures per camera: {args.burst}")
     print(f"Exposure: {args.exposure} µs")
     print(f"Gain: {args.gain}")
     print(f"JPEG quality: {args.jpeg_quality}")
@@ -507,40 +380,20 @@ RAM Disk Setup:
     print("\nCameras ready. Beginning capture sequence...")
     
     try:
-        # Perform capture cycles with 5 burst sets each
+        # Perform capture cycles
         for cycle in range(args.count):
-            print(f"\n{'='*60}")
-            print(f"CAPTURE CYCLE {cycle + 1} of {args.count}")
-            print(f"{'='*60}")
+            print(f"\n{'#'*60}")
+            print(f"# Capture Cycle {cycle + 1} of {args.count}")
+            print(f"{'#'*60}")
             
-            for burst_set in range(BURST_SETS):
-                print(f"\n{'#'*60}")
-                print(f"# Burst Set {burst_set + 1}/{BURST_SETS}")
-                print(f"{'#'*60}")
-                
-                # Perform one burst capture set
-                sequential_capture_cycle(
-                    picam0, 
-                    picam1, 
-                    working_dir,  # Write to ramdisk if specified, otherwise final dir
-                    burst_count=args.burst,
-                    jpeg_quality=args.jpeg_quality,
-                    save_metadata=not args.no_metadata
-                )
-                
-                # Show RAM usage and flush after each burst set (if using ramdisk)
-                if use_ramdisk:
-                    print_ramdisk_status(working_dir, f"RAM Usage After Set {burst_set + 1}")
-                    
-                    # Start flush and record time
-                    flush_start = time.time()
-                    flush_ramdisk_to_storage(working_dir, final_dir, clear_ramdisk=True)
-                    
-                    # Check availability at 4th second (complete by 5th second)
-                    if burst_set < BURST_SETS - 1:  # Not the last set
-                        check_ramdisk_availability(working_dir, flush_start, check_at_second=4.0)
-                    else:
-                        print("\n✓ All burst sets in this cycle completed")
+            sequential_capture_cycle(
+                picam0, 
+                picam1, 
+                working_dir,  # Write to ramdisk if specified, otherwise final dir
+                burst_count=args.burst,
+                jpeg_quality=args.jpeg_quality,
+                save_metadata=not args.no_metadata
+            )
             
             # Wait between cycles if interval specified
             if cycle + 1 < args.count and args.interval > 0:
@@ -548,14 +401,18 @@ RAM Disk Setup:
                 time.sleep(args.interval)
         
         print(f"\n{'='*60}")
-        print(f"ALL CYCLES COMPLETED!")
+        print(f"All {args.count} capture cycle(s) completed!")
         print(f"{'='*60}")
-        print(f"Total burst sets: {args.count * BURST_SETS}")
-        print(f"Total images: {args.count * BURST_SETS * args.burst * 4}")
         
-        # Final message
+        # Flush RAM disk to permanent storage if using ramdisk
         if use_ramdisk:
-            print(f"\n✓ All files saved to: {final_dir}")
+            try:
+                flush_ramdisk_to_storage(working_dir, final_dir)
+                print(f"\n✓ All files saved to: {final_dir}")
+            except Exception as e:
+                print(f"\n⚠ WARNING: Failed to flush RAM disk: {e}")
+                print(f"   Files still available in RAM disk: {working_dir}")
+                raise
         else:
             print(f"\n✓ All files saved to: {args.outdir}")
         
