@@ -15,9 +15,11 @@ except Exception:
 
 # Picamera2 imports
 from picamera2 import Picamera2
+
 try:
     # DNGWriter is available on recent picamera2 builds
     from picamera2 import DNGWriter
+
     HAVE_DNG = True
 except Exception:
     HAVE_DNG = False
@@ -37,39 +39,46 @@ def meter_and_lock(picam: Picamera2, meter_time_s: float = 1.0):
 
     md = picam.capture_metadata()
     # Extract current settings
-    exp_us = md.get("ExposureTime")              # in microseconds
-    again   = md.get("AnalogueGain")
-    cgains  = md.get("ColourGains")              # (R, B) gains
+    exp_us = md.get("ExposureTime")  # in microseconds
+    again = md.get("AnalogueGain")
+    cgains = md.get("ColourGains")  # (R, B) gains
 
     # Safety defaults if metadata missing
-    if exp_us is None: exp_us = 10000
-    if again  is None: again  = 1.0
-    if cgains is None: cgains = (1.0, 1.0)
+    if exp_us is None:
+        exp_us = 10000
+    if again is None:
+        again = 1.0
+    if cgains is None:
+        cgains = (1.0, 1.0)
 
     # Disable auto and set fixed controls
-    picam.set_controls({
-        "AeEnable": False,
-        "AwbEnable": False,
-        "ExposureTime": int(exp_us),
-        "AnalogueGain": float(again),
-        "ColourGains": (float(cgains[0]), float(cgains[1])),
-    })
+    picam.set_controls(
+        {
+            "AeEnable": False,
+            "AwbEnable": False,
+            "ExposureTime": int(exp_us),
+            "AnalogueGain": float(again),
+            "ColourGains": (float(cgains[0]), float(cgains[1])),
+        }
+    )
 
     # Give driver a moment to apply locks
     time.sleep(0.05)
     return {
         "ExposureTime_us": int(exp_us),
         "AnalogueGain": float(again),
-        "ColourGains": [float(cgains[0]), float(cgains[1])]
+        "ColourGains": [float(cgains[0]), float(cgains[1])],
     }
 
 
-def camera_worker(cam_index: int,
-                  outdir: str,
-                  stamp: str,
-                  ready_barrier: mp.Barrier,
-                  go_event: mp.Event,
-                  write_json_meta: bool = True):
+def camera_worker(
+    cam_index: int,
+    outdir: str,
+    stamp: str,
+    ready_barrier: mp.Barrier,
+    go_event: mp.Event,
+    write_json_meta: bool = True,
+):
     """
     One process per camera:
       1) Open camera
@@ -86,9 +95,9 @@ def camera_worker(cam_index: int,
         # We let Picamera2 choose sensible sizes; you can set `main={"size": (4056, 3040)}`
         # for HQ sensors, etc., if you want full res.
         cfg = picam.create_still_configuration(
-            main={},                      # default full-res
+            main={},  # default full-res
             lores=None,
-            raw={}                        # enable raw stream
+            raw={},  # enable raw stream
         )
         picam.configure(cfg)
 
@@ -143,14 +152,19 @@ def camera_worker(cam_index: int,
                 "camera_index": cam_index,
                 "timestamp": stamp,
                 "metered_locks": metered,
-                "raw_saved": "dng" if saved_raw else ("npy" if np is not None else "none"),
+                "raw_saved": "dng"
+                if saved_raw
+                else ("npy" if np is not None else "none"),
                 "paths": {
                     "jpeg": jpg_path,
                     "dng": dng_path if saved_raw else None,
-                    "raw_npy": rawnpy_path if (not saved_raw and np is not None) else None
+                    "raw_npy": rawnpy_path
+                    if (not saved_raw and np is not None)
+                    else None,
                 },
-                "capture_metadata": raw_md
+                "capture_metadata": raw_md,
             }
+
             # Some metadata keys may not be JSON serializable; make safe
             def _safe(o):
                 try:
@@ -180,10 +194,20 @@ def camera_worker(cam_index: int,
 
 def main():
     import argparse
-    ap = argparse.ArgumentParser(description="Dual CSI capture (JPEG + RAW) with exposure/WB lock for NDVI.")
+
+    ap = argparse.ArgumentParser(
+        description="Dual CSI capture (JPEG + RAW) with exposure/WB lock for NDVI."
+    )
     ap.add_argument("--outdir", default="captures", help="Output directory")
-    ap.add_argument("--pair-count", type=int, default=1, help="How many synchronized pairs to capture")
-    ap.add_argument("--interval", type=float, default=0.0, help="Seconds between pairs (>=0)")
+    ap.add_argument(
+        "--pair-count",
+        type=int,
+        default=1,
+        help="How many synchronized pairs to capture",
+    )
+    ap.add_argument(
+        "--interval", type=float, default=0.0, help="Seconds between pairs (>=0)"
+    )
     args = ap.parse_args()
 
     _ensure_dir(args.outdir)
@@ -193,16 +217,23 @@ def main():
 
     for i in range(args.pair_count):
         # Common timestamp for both cameras (UTC-ish, filesystem-safe)
-        stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S_%f")[:-3]  # millisecond resolution
+        stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S_%f")[
+            :-3
+        ]  # millisecond resolution
 
         # Barrier for “both ready” + event for “go now”
         ready_barrier = mp.Barrier(2)
         go_event = mp.Event()
 
         # Start both workers
-        p0 = mp.Process(target=camera_worker, args=(0, args.outdir, stamp, ready_barrier, go_event))
-        p1 = mp.Process(target=camera_worker, args=(1, args.outdir, stamp, ready_barrier, go_event))
-        p0.start(); p1.start()
+        p0 = mp.Process(
+            target=camera_worker, args=(0, args.outdir, stamp, ready_barrier, go_event)
+        )
+        p1 = mp.Process(
+            target=camera_worker, args=(1, args.outdir, stamp, ready_barrier, go_event)
+        )
+        p0.start()
+        p1.start()
 
         # Wait until both children report “ready”
         ready_barrier.wait()
@@ -211,7 +242,8 @@ def main():
         go_event.set()
 
         # Join
-        p0.join(); p1.join()
+        p0.join()
+        p1.join()
 
         if i + 1 < args.pair_count and args.interval > 0:
             time.sleep(args.interval)
