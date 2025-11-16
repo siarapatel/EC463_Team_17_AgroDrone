@@ -480,6 +480,10 @@ RAM Disk Setup:
 
     # Determine working directory (ramdisk if specified, otherwise final outdir)
     use_ramdisk = args.ramdisk is not None
+
+    if not use_ramdisk:
+        print("not using ramdisk")
+        
     working_dir = args.ramdisk if use_ramdisk else args.outdir
     final_dir = args.outdir
 
