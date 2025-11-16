@@ -10,6 +10,7 @@ import (
 // Searches for WiFi AP and attempts to connect to it
 func findAndConnect(ssid string, remotePassword string) bool {
 	// First, we check for available WiFi access points
+	_ = exec.Command("nmcli", "dev", "wifi", "rescan").Run()
 	cmd := exec.Command("nmcli", "-f", "SSID,SIGNAL,SECURITY", "dev", "wifi")
 	out, err := cmd.Output()
 	if err != nil {
