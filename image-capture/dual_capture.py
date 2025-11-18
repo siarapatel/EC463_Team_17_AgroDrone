@@ -32,46 +32,43 @@ def capture():
             self.burst = burst
             self.no_metadata = no_metadata
 
-    args = Args()  # instantiate and assign
-    working_dir = args.outdir
+    try:
+        args = Args()  # instantiate and assign
+        working_dir = args.outdir
 
-    # Create working directory
-    ensure_dir(working_dir)
+        # Create working directory
+        ensure_dir(working_dir)
 
-    # Initialize both cameras
-    picam0 = init_camera(0, args.exposure, args.gain)
-    picam1 = init_camera(1, args.exposure, args.gain)
+        # Initialize both cameras
+        picam0 = init_camera(0, args.exposure, args.gain)
+        picam1 = init_camera(1, args.exposure, args.gain)
 
-    # Start both cameras (pre-start for minimal capture delay)
-    picam0.start()
-    picam1.start()
+        # Start both cameras (pre-start for minimal capture delay)
+        picam0.start()
+        picam1.start()
 
-    # Brief settling time for 3A locks to take effect
-    time.sleep(0.2)
+        # Brief settling time for 3A locks to take effect
+        time.sleep(0.2)
 
-    # Perform one burst capture set
-    sequential_capture_cycle(
-        picam0,
-        picam1,
-        working_dir,
-        burst_count=args.burst,
-        jpeg_quality=args.jpeg_quality,
-    )
+        # Perform one burst capture set
+        sequential_capture_cycle(
+            picam0,
+            picam1,
+            working_dir,
+            burst_count=args.burst,
+            jpeg_quality=args.jpeg_quality,
+        )
 
-    """    
     finally:
         # Clean shutdown
         print("\nStopping cameras...")
-        try:
-            picam0.stop()
-        except:
-            pass
-        try:
-            picam1.stop()
-        except:
-            pass
+        for cam in (picam0, picam1):
+            try:
+                cam.stop()
+                cam.close()  # release hardware
+            except Exception:
+                pass
         print("Cameras stopped.")
-    """
 
 
 if __name__ == "__main__":
