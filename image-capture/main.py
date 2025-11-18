@@ -12,8 +12,6 @@ def on_press():
 
 
 def main():
-    # button = Button(PIN, pull_up=False)  # pull_up=False == pull-down
-    # button.when_pressed = on_press
     try:
         print("Hello from image-capture!")
         button = Button(PIN, pull_up=False)  # pull_up=False == pull-down

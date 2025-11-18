@@ -5,7 +5,6 @@ description = "Image capture scripts for AgroDrone"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-  "gpiod>=2.4.0",
   "gpiozero>=2.0.1",
   "lgpio>=0.2.2.0",
   "numpy>=2.3.5",
