@@ -9,6 +9,7 @@ PIN = 27  # BCM Pin
 def on_press():
     print("Starting Capture")
     capture()
+    print("\n\n\n\n\n")
 
 
 def main():
