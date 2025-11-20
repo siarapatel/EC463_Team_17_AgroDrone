@@ -47,8 +47,9 @@ def capture():
         picam0.start()
         picam1.start()
 
-        # Brief settling time for 3A locks to take effect
-        time.sleep(0.2)
+        # Settling time for 3A algorithms (auto-exposure, auto-white-balance) to converge
+        print("Waiting for 3A algorithms to stabilize...")
+        time.sleep(0.5)
 
         # Perform one burst capture set
         sequential_capture_cycle(
