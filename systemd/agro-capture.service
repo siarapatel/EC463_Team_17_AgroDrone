@@ -1,0 +1,16 @@
+# /etc/systemd/system/agro-capture.service
+[Unit]
+Description=AgroDrone image capture service
+After=network.target
+
+[Service]
+Type=simple
+User=sr-design
+WorkingDirectory=/home/sr-design/EC463_Team_17_AgroDrone/image-capture
+ExecStart=/home/sr-design/.local/bin/uv run main.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+
