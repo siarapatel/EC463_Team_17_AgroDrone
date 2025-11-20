@@ -38,17 +38,17 @@ func main() {
 			continue
 		}
 
-		// // And delete
-		// log.Println("Deleteing local files")
-		// entries, err := os.ReadDir(exportDir)
-		// if err != nil {
-		// 	log.Printf("Failed to delete %v", err)
-		// 	time.Sleep(5 * time.Second)
-		// 	continue
-		// }
-		// for _, e := range entries {
-		// 	os.RemoveAll(filepath.Join(exportDir, e.Name()))
-		// }
+		// And delete
+		log.Println("Deleteing local files")
+		entries, err := os.ReadDir(exportDir)
+		if err != nil {
+			log.Printf("Failed to delete %v", err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		for _, e := range entries {
+			os.RemoveAll(filepath.Join(exportDir, e.Name()))
+		}
 
 		// if files transferred, do a bigger timeout
 		log.Println("Sleeping for a bit")
