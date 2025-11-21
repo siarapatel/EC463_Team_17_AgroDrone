@@ -32,7 +32,15 @@ func main() {
 		// 	}
 		// }
 		// now transfer files
-		err := scpDir(exportDir, ingestDir, remoteUser, remotePassword, "10.193.141.194")
+		//
+		//
+		entries, err := os.ReadDir(exportDir)
+		if err != nil || len(entries) == 0 {
+			log.Println("Nothing to do; sleeping")
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		err = scpDir(exportDir, ingestDir, remoteUser, remotePassword, "10.193.141.194")
 		if err != nil {
 			log.Printf("Error occured on scp: %v", err)
 			time.Sleep(5 * time.Second)
@@ -41,7 +49,7 @@ func main() {
 
 		// And delete
 		log.Println("Deleteing local files")
-		entries, err := os.ReadDir(exportDir)
+		entries, err = os.ReadDir(exportDir)
 		if err != nil {
 			log.Printf("Failed to delete %v", err)
 			time.Sleep(5 * time.Second)
