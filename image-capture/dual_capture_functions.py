@@ -24,23 +24,13 @@ def ensure_dir(path: str):
 
 def init_camera(cam_num: int, exposure_time: int, analogue_gain: float):
     """
-<<<<<<< HEAD
-    Initialize and configure a single camera with locked 3A parameters.
-
-    Args:
-        cam_num: Camera index (0 or 1)
-        exposure_time: Exposure time in microseconds
-        analogue_gain: Analogue gain value
-
-=======
     Initialize and configure a single camera with automatic 3A parameters.
-    
+
     Args:
         cam_num: Camera index (0 or 1)
         exposure_time: Not used when 3A is enabled (kept for API compatibility)
         analogue_gain: Not used when 3A is enabled (kept for API compatibility)
-    
->>>>>>> 3cb14e4 (use auto 3A)
+
     Returns:
         Configured Picamera2 instance
     """
@@ -58,31 +48,17 @@ def init_camera(cam_num: int, exposure_time: int, analogue_gain: float):
     )
 
     picam.configure(config)
-<<<<<<< HEAD
 
-    # Lock all 3A parameters
+    # Enable 3A parameters for automatic adjustments and prettier pictures
     picam.set_controls(
         {
-            "AeEnable": False,  # Disable auto-exposure
-            "AwbEnable": False,  # Disable auto white balance
-            "ExposureTime": int(exposure_time),
-            "AnalogueGain": float(analogue_gain),
-            "ColourGains": (1.0, 1.0),  # Fixed color gains as specified
+            "AeEnable": True,  # Enable auto-exposure
+            "AwbEnable": True,  # Enable auto white balance
+            # Manual controls (ExposureTime, AnalogueGain, ColourGains) are not set
+            # when auto modes are enabled - the camera adjusts these automatically
         }
     )
 
-=======
-    
-    # Enable 3A parameters for automatic adjustments and prettier pictures
-    picam.set_controls({
-        "AeEnable": True,   # Enable auto-exposure
-        "AwbEnable": True,  # Enable auto white balance
-        # Manual controls (ExposureTime, AnalogueGain, ColourGains) are not set
-        # when auto modes are enabled - the camera adjusts these automatically
-    })
-    
-   
->>>>>>> 3cb14e4 (use auto 3A)
     return picam
 
 
@@ -230,4 +206,3 @@ def sequential_capture_cycle(
         json.dump(metadata_dict, f, indent=2, default=str)
 
     return timestamp, {"camera_0": cam0_info, "camera_1": cam1_info}
-
