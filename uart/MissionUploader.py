@@ -5,15 +5,15 @@ import time
 
 class MissionUploader:
     def __init__(
-        self, port= "/dev/serial0", baud=115200
+        self, port="/dev/serial0", baud=115200
     ):  # Need to change the port we are opening
         self.ser = serial.Serial(port, baud, timeout=1)  # Opens connection to FC
 
         # MSP Command IDs
 
-        # When FC sees 214, it knows the next bytes sent are a waypoint
+        # When FC sees 209, it knows the next bytes sent are a waypoint
         # When FC sees 250 it knows to save everything learned to EEPROM
-        self.MSP_SET_WP = 214
+        self.MSP_SET_WP = 209
         self.MSP_EEPROM_WRITE = 250
 
         # INAV Constants
@@ -21,21 +21,56 @@ class MissionUploader:
         self.RTH_ACTION = 0x04  # Return to Home
         self.LAST_WP_FLAG = 0xA5  # Flag to indicate end of mission, last waypoint
 
-    def _create_packet(self, cmd, payload):
-        # Wraps the payload in the MSP $M< header and checksum
-        header = b"$M<"  # Every MSP message must start with these 3 bytes. MultiWii incoming message
-        size = len(payload)
-        checksum = size ^ cmd
-        for byte in payload:
-            checksum ^= byte  # When FC gets data it does same math. If matches ours, no data corruption happened
+    # Function to check if received checksum matches
+    def CRC_DVB_S2_check(self, message) -> bool:
+        checksum = self.calculate_DVB_S2_checksum(message[3:-1])
+        if checksum == message[-1]:
+            return True
+        else:
+            print("CRC check failed")
+            print(
+                "Message CRC: "
+                + repr(message[-1])
+                + ", calculated CRC: "
+                + repr(checksum)
+            )
+            return False
 
-        # Header + Size + Command + Data + Checksum
-        return (
-            header
-            + struct.pack("<BB", size, cmd)
-            + payload
-            + struct.pack("<B", checksum)
-        )
+    # Function to calculate the DVB-S2 CRC for MSP V2
+    # I have actually no clue how the algorithm works, but it apparently does.
+    def calculate_DVB_S2_checksum(self, data) -> int:
+        checksum = 0x00
+        for byte in data:
+            checksum ^= byte
+            for _ in range(8):
+                if checksum & 0x80:
+                    checksum = (checksum << 1) ^ 0xD5
+                else:
+                    checksum <<= 1
+                checksum &= 0xFF
+        return checksum
+
+    def create_msp_request(self, function, payload=b""):
+        # Fixed to handle payloads and return bytes
+        flag = 0
+        size = len(payload)
+        message = bytearray(9 + size)
+        message[0] = ord("$")
+        message[1] = ord("X")
+        message[2] = ord("<")
+        message[3] = flag
+        message[4] = function & 0xFF  # Low byte
+        message[5] = (function >> 8) & 0xFF  # High byte
+        message[6] = size & 0xFF  # Low byte
+        message[7] = (size >> 8) & 0xFF  # High byte
+        if payload:
+            message[8 : 8 + size] = payload
+        message[-1] = self.calculate_DVB_S2_checksum(message[3:-1])
+        return bytes(message)
+
+    def _create_packet(self, cmd, payload=b""):
+        # Wrapper using the same V2 format
+        return self.create_msp_request(cmd, payload)
 
     def upload_waypoint(self, index, lat, lon, alt_cm, is_last=False):
         """
@@ -101,25 +136,30 @@ if __name__ == "__main__":
     uploader = MissionUploader()
 
     # This list would come from Web App JSON
-    # Format: (Lat, Lon, Altitude_Meters)
+    # spec: https://github.com/iNavFlight/inav/blob/master/src/main/msp/msp_protocol.h
+    # The spec says: (WP#,lat, lon, alt, flags)
     new_mission = [
-        (43.3459037, -80, 20),
-        (43.3459055, -90, 25),  # Flying higher at the end
+        (43.3459037, -90, 20),
+        (42.3459055, -91, 25),
+        (41.3459055, -92, 25),
     ]
 
     print("Starting Upload...")
 
+    # set home first or it tweaks
+    uploader.upload_waypoint(0, 42.361145, -71.057083, 0, False)
+
     try:
         # Start at Index 1 (Index 0 is Home/Origin)
         for i, point in enumerate(new_mission):
-            wp_index = i + 1
+            waypoint_num = i + 1
             is_last_point = i == len(new_mission) - 1
 
             # Convert Altitude from Meters to CM for the function
             alt_cm = point[2] * 100
 
             uploader.upload_waypoint(
-                wp_index, point[0], point[1], alt_cm, is_last_point
+                waypoint_num, point[0], point[1], alt_cm, is_last_point
             )
 
         # CRITICAL: Save to EEPROM or it will vanish on reboot
@@ -130,4 +170,3 @@ if __name__ == "__main__":
         print(f"Error: {e}")
     finally:
         uploader.close()
-
