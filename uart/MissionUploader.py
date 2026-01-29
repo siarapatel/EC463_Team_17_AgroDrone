@@ -14,7 +14,7 @@ class MissionUploader:
         # When FC sees 209, it knows the next bytes sent are a waypoint
         # When FC sees 250 it knows to save everything learned to EEPROM
         self.MSP_SET_WP = 209
-        self.MSP_EEPROM_WRITE = 250
+        self.MSP_SAVE_NVRAM = 19
 
         # INAV Constants
         self.WAYPOINT_ACTION = 0x01  # "Fly here" type of waypoint
@@ -88,7 +88,7 @@ class MissionUploader:
         flag = self.LAST_WP_FLAG if is_last else 0x00
         p1 = 0  # Hold time (s) or speed. If 0, drone flies at default nav_auto_speed
         p2 = 0  # Often unused, basically just leave at 0
-        p3 = 0  # IMPORTANT In newest INAV version can be used as a "Bitfield" to trigger specific logic conditions
+        p3 = 1  # IMPORTANT In newest INAV version can be used as a "Bitfield" to trigger specific logic conditions
         # Leave at zero for now we will look into it later.
 
         # 3. Pack Structure
@@ -122,10 +122,10 @@ class MissionUploader:
 
     def save_mission(self):
         # Saves the uploaded mission to EEPROM
-        packet = self._create_packet(self.MSP_EEPROM_WRITE, b"")
+        packet = self._create_packet(self.MSP_SAVE_NVRAM, b"")
         self.ser.write(packet)
+        print("Mission Saved to NVRAM")
         time.sleep(0.5)  # Give it time to write
-        print("Mission Saved to EEPROM")
 
     def close(self):
         self.ser.close()
@@ -139,15 +139,15 @@ if __name__ == "__main__":
     # spec: https://github.com/iNavFlight/inav/blob/master/src/main/msp/msp_protocol.h
     # The spec says: (WP#,lat, lon, alt, flags)
     new_mission = [
-        (43.3459037, -90, 20),
-        (42.3459055, -91, 25),
-        (41.3459055, -92, 25),
+        (42.3456347, -71.1132435, 12),
+        (42.3459037, -71.1128325, 12),
+        (42.3458440, -71.1123549, 12),
     ]
 
     print("Starting Upload...")
 
     # set home first or it tweaks
-    uploader.upload_waypoint(0, 42.361145, -71.057083, 0, False)
+    uploader.upload_waypoint(0, 42.3456347, -71.1132435, 0, False)
 
     try:
         # Start at Index 1 (Index 0 is Home/Origin)
