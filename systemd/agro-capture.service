@@ -7,6 +7,7 @@ After=network.target
 Type=simple
 User=sr-design
 WorkingDirectory=/home/sr-design/EC463_Team_17_AgroDrone/image-capture
+Environment="AGRO_OUTDIR=/home/sr-design/export"
 ExecStart=/home/sr-design/.local/bin/uv run main.py
 Restart=always
 RestartSec=3
