@@ -12,7 +12,8 @@ class MissionUploader:
         # MSP Command IDs
 
         # When FC sees 209, it knows the next bytes sent are a waypoint
-        # When FC sees 250 it knows to save everything learned to EEPROM
+        # When FC sees 250, it knows to save everything learned to EEPROM - this did not work as expected
+        # When FC sees 19, it knows to save everything learned to NVRAM - this works and persists beyond flight
         self.MSP_SET_WP = 209
         self.MSP_SAVE_NVRAM = 19
 
@@ -138,6 +139,8 @@ if __name__ == "__main__":
     # This list would come from Web App JSON
     # spec: https://github.com/iNavFlight/inav/blob/master/src/main/msp/msp_protocol.h
     # The spec says: (WP#,lat, lon, alt, flags)
+    # https://github.com/iNavFlight/inav/blob/master/src/main/fc/fc_msp.c#L2959
+
     new_mission = [
         (42.3456347, -71.1132435, 12),
         (42.3459037, -71.1128325, 12),
@@ -159,7 +162,7 @@ if __name__ == "__main__":
             alt_cm = point[2] * 100
 
             uploader.upload_waypoint(
-                waypoint_num, point[0], point[1], alt_cm, is_last_point
+                waypoint_num, 3, point[0], point[1], alt_cm, 2, 51, 0, is_last_point * 165
             )
 
         # CRITICAL: Save to EEPROM or it will vanish on reboot
