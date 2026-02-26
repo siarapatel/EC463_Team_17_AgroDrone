@@ -1,45 +1,36 @@
-import serial  # Imports PySerial library, allows it to talk to UART HW
-import struct  # FC is in C and expects data in byte sizes. Python uses objects. struct smashes pthon objects into C style raw bytes
+import serial   # PySerial: handles UART/USB-Serial communication
+import struct   # Packs Python objects into C-style raw bytes for the FC
 import time
 
 
 class MissionUploader:
-    def __init__(
-        self, port="/dev/serial0", baud=115200
-    ):  # Need to change the port we are opening
-        self.ser = serial.Serial(port, baud, timeout=1)  # Opens connection to FC
+    def __init__(self, port="/dev/ttyUSB0", baud=115200):
+        """
+        Opens a serial connection to the flight controller.
+        Default port is /dev/ttyUSB0 for USB-C/USB-Serial adapters.
+        Use /dev/ttyACM0 for CDC-ACM devices, or /dev/serial0 for GPIO UART.
+        Run `ls /dev/tty*` before and after plugging in to find your port.
+        """
+        self.ser = serial.Serial(port, baud, timeout=1)
 
-        # MSP Command IDs
+        # MSP V2 Command IDs
+        self.MSP_SET_WP    = 209   # Upload a single waypoint to the FC
+        self.MSP_SAVE_NVRAM = 19   # Persist mission to NVRAM (survives reboot)
 
-        # When FC sees 209, it knows the next bytes sent are a waypoint
-        # When FC sees 250, it knows to save everything learned to EEPROM - this did not work as expected
-        # When FC sees 19, it knows to save everything learned to NVRAM - this works and persists beyond flight
-        self.MSP_SET_WP = 209
-        self.MSP_SAVE_NVRAM = 19
+        # INAV Waypoint Action Types (from MSP spec)
+        self.WP_ACTION_WAYPOINT    = 0x01   # Standard fly-to waypoint
+        self.WP_ACTION_POSHOLD_TIME = 0x03  # Hold position for P1 seconds
+        self.WP_ACTION_RTH         = 0x04   # Return to Home (P1=1 triggers land)
 
-        # INAV Constants
-        self.WAYPOINT_ACTION = 0x01  # "Fly here" type of waypoint
-        self.RTH_ACTION = 0x04  # Return to Home
-        self.LAST_WP_FLAG = 0xA5  # Flag to indicate end of mission, last waypoint
+        # Protocol flag marking the final waypoint in a mission
+        self.LAST_WP_FLAG = 0xA5
 
-    # Function to check if received checksum matches
-    def CRC_DVB_S2_check(self, message) -> bool:
-        checksum = self.calculate_DVB_S2_checksum(message[3:-1])
-        if checksum == message[-1]:
-            return True
-        else:
-            print("CRC check failed")
-            print(
-                "Message CRC: "
-                + repr(message[-1])
-                + ", calculated CRC: "
-                + repr(checksum)
-            )
-            return False
+    # -------------------------------------------------------------------------
+    # CRC / Checksum Helpers
+    # -------------------------------------------------------------------------
 
-    # Function to calculate the DVB-S2 CRC for MSP V2
-    # I have actually no clue how the algorithm works, but it apparently does.
     def calculate_DVB_S2_checksum(self, data) -> int:
+        """Calculates the DVB-S2 CRC used by MSP V2."""
         checksum = 0x00
         for byte in data:
             checksum ^= byte
@@ -51,8 +42,20 @@ class MissionUploader:
                 checksum &= 0xFF
         return checksum
 
-    def create_msp_request(self, function, payload=b""):
-        # Fixed to handle payloads and return bytes
+    def CRC_DVB_S2_check(self, message) -> bool:
+        """Verifies a received message's checksum."""
+        checksum = self.calculate_DVB_S2_checksum(message[3:-1])
+        if checksum == message[-1]:
+            return True
+        print(f"CRC check failed — message: {repr(message[-1])}, calculated: {repr(checksum)}")
+        return False
+
+    # -------------------------------------------------------------------------
+    # Packet Construction
+    # -------------------------------------------------------------------------
+
+    def create_msp_request(self, function, payload=b"") -> bytes:
+        """Builds a complete MSP V2 packet with header, payload, and CRC."""
         flag = 0
         size = len(payload)
         message = bytearray(9 + size)
@@ -60,86 +63,160 @@ class MissionUploader:
         message[1] = ord("X")
         message[2] = ord("<")
         message[3] = flag
-        message[4] = function & 0xFF  # Low byte
-        message[5] = (function >> 8) & 0xFF  # High byte
-        message[6] = size & 0xFF  # Low byte
-        message[7] = (size >> 8) & 0xFF  # High byte
+        message[4] = function & 0xFF          # Function ID low byte
+        message[5] = (function >> 8) & 0xFF   # Function ID high byte
+        message[6] = size & 0xFF              # Payload size low byte
+        message[7] = (size >> 8) & 0xFF       # Payload size high byte
         if payload:
-            message[8 : 8 + size] = payload
+            message[8: 8 + size] = payload
         message[-1] = self.calculate_DVB_S2_checksum(message[3:-1])
         return bytes(message)
 
-    def _create_packet(self, cmd, payload=b""):
-        # Wrapper using the same V2 format
+    def _create_packet(self, cmd, payload=b"") -> bytes:
+        """Convenience wrapper around create_msp_request."""
         return self.create_msp_request(cmd, payload)
 
-    def upload_waypoint(self, index, lat, lon, alt_cm, is_last=False):
-        """
-        Uploads a single waypoint.
-        index: 1-based index (0 is usually HOME)
-        lat/lon: Floating point degrees (e.g., 42.3601)
-        alt_cm: Altitude in CENTIMETERS (e.g., 2000 = 20m)
-        """
+    # -------------------------------------------------------------------------
+    # Low-Level Waypoint Senders
+    # -------------------------------------------------------------------------
 
-        # 1. Convert to Integers (INAV expects degrees * 10,000,000)
+    def _send_waypoint(self, index, action, lat, lon, alt_cm, p1, p2, p3, flag):
+        """
+        Internal: packs and sends a single waypoint over serial.
+        All fields explicit — callers must set flag deliberately.
+
+        Packet format (MSP_SET_WP):
+          B  - WP index
+          B  - Action type
+          i  - Latitude  (degrees * 10,000,000, signed)
+          i  - Longitude (degrees * 10,000,000, signed)
+          i  - Altitude  (centimeters, signed)
+          h  - P1
+          h  - P2
+          h  - P3
+          B  - Flag (0x00 normal, 0xA5 = last waypoint)
+        """
         lat_int = int(lat * 10_000_000)
         lon_int = int(lon * 10_000_000)
 
-        # 2. Set Flags
-        flag = self.LAST_WP_FLAG if is_last else 0x00
-        p1 = 0  # Hold time (s) or speed. If 0, drone flies at default nav_auto_speed
-        p2 = 0  # Often unused, basically just leave at 0
-        p3 = 1  # IMPORTANT In newest INAV version can be used as a "Bitfield" to trigger specific logic conditions
-        # Leave at zero for now we will look into it later.
-
-        # 3. Pack Structure
-        # Format: < B (Index), B (Action), i (Lat), i (Lon), i (Alt), h (P1), h (P2), h (P3), B (Flag)
-        # IMPORTANT: Gemini suggested fix of making it iii instead of iII so lat long and alt are signed integers
         payload = struct.pack(
             "<BBiiihhhB",
-            index,
-            self.WAYPOINT_ACTION,
-            lat_int,
-            lon_int,
-            alt_cm,
-            p1,
-            p2,
-            p3,
-            flag,
+            index, action, lat_int, lon_int, alt_cm, p1, p2, p3, flag
         )
-
-        # Create packet then send it over to the FC
         packet = self._create_packet(self.MSP_SET_WP, payload)
         self.ser.write(packet)
 
-        # 4. Wait for ACK (Important!)
-        # INAV sends a response. If we spam too fast, we might overrun the buffer.
+        # Brief pause to avoid overrunning the FC's UART buffer, then clear it
         time.sleep(0.1)
-        # If there are bytes waiting, pull data out of buffer (clear buffer)
         if self.ser.in_waiting:
-            self.ser.read(self.ser.in_waiting)  # Clear buffer
+            self.ser.read(self.ser.in_waiting)
 
-        print(f"Uploaded WP {index}: {lat}, {lon}")
+    def upload_waypoint(self, index, action, lat, lon, alt_cm, p1=0, p2=0, p3=1):
+        """
+        Public: uploads a standard (non-terminal) waypoint.
+        Flag is always 0x00 — mission termination is handled by upload_mission().
+        """
+        self._send_waypoint(index, action, lat, lon, alt_cm, p1, p2, p3, flag=0x00)
+        print(f"  WP {index:>2} | action={action} | {lat:.7f}, {lon:.7f} | alt={alt_cm}cm")
+
+    def _upload_terminal_rth(self, index, lat=0, lon=0, alt_cm=0):
+        """
+        Internal: uploads the final RTH+Land waypoint with LAST_WP_FLAG set.
+        lat/lon/alt are ignored by INAV for RTH but included for protocol compliance.
+        P1=1 instructs INAV to land after returning home.
+        """
+        self._send_waypoint(
+            index,
+            self.WP_ACTION_RTH,
+            lat, lon, alt_cm,
+            p1=1, p2=0, p3=0,
+            flag=self.LAST_WP_FLAG
+        )
+        print(f"  WP {index:>2} | action=RTH+LAND | flag=LAST_WP (0xA5)")
+
+    # -------------------------------------------------------------------------
+    # Mission Upload
+    # -------------------------------------------------------------------------
+
+    def upload_mission(self, mission):
+        """
+        Uploads a complete mission from a list of (lat, lon, alt_m) tuples.
+
+        Mission structure:
+          WP 0       — Home position (WAYPOINT action, alt=0, no hold)
+          WP 1 to N  — Mission waypoints (POSHOLD_TIME, holds for P1 seconds)
+          WP N+1     — RTH + Land (auto-appended, LAST_WP_FLAG set here)
+
+        P1/P2/P3 for POSHOLD waypoints: p1=2 (hold 2s), p2=51, p3=0
+        The LAST_WP_FLAG is never set on a real waypoint — only on the RTH cap.
+        This ensures INAV always executes every mission waypoint before returning.
+        """
+        if not mission:
+            raise ValueError("Mission must contain at least one waypoint.")
+
+        print(f"\nUploading mission: {len(mission)} waypoint(s) + home + RTH")
+        print("-" * 55)
+
+        # WP 0: Home — standard waypoint at ground level, no hold
+        home = mission[0]
+        self.upload_waypoint(
+            0,
+            self.WP_ACTION_WAYPOINT,
+            home[0], home[1],
+            alt_cm=0,
+            p1=0, p2=0, p3=1
+        )
+
+        # WP 1 to N: Mission waypoints as POSHOLD_TIME
+        for i, point in enumerate(mission):
+            wp_index = i + 1
+            alt_cm = point[2] * 100  # Convert meters to centimeters
+            self.upload_waypoint(
+                wp_index,
+                self.WP_ACTION_POSHOLD_TIME,
+                point[0], point[1],
+                alt_cm,
+                p1=2, p2=51, p3=0
+            )
+
+        # WP N+1: RTH + Land — always the terminal waypoint
+        rth_index = len(mission) + 1
+        self._upload_terminal_rth(rth_index)
+
+        print("-" * 55)
+        print(f"Mission structure complete. Total packets sent: {rth_index + 1}")
+
+    # -------------------------------------------------------------------------
+    # Save & Close
+    # -------------------------------------------------------------------------
 
     def save_mission(self):
-        # Saves the uploaded mission to EEPROM
+        """Persists the uploaded mission to NVRAM. Must be called after upload."""
         packet = self._create_packet(self.MSP_SAVE_NVRAM, b"")
         self.ser.write(packet)
-        print("Mission Saved to NVRAM")
-        time.sleep(0.5)  # Give it time to write
+        time.sleep(0.5)  # Give FC time to write to NVRAM
+        print("Mission saved to NVRAM.")
 
     def close(self):
+        """Closes the serial connection."""
         self.ser.close()
+        print("Serial connection closed.")
 
 
-# --- EXAMPLE USAGE ---
+# =============================================================================
+# EXAMPLE USAGE
+# =============================================================================
+# Waypoint format: (lat, lon, alt_meters)
+# To find your USB port: run `ls /dev/tty*` before and after plugging in.
+# Common ports:
+#   /dev/ttyUSB0  — CH340, FTDI, CP2102 USB-Serial adapters
+#   /dev/ttyACM0  — CDC-ACM devices (some FCs enumerate this way)
+#   /dev/serial0  — Raspberry Pi GPIO UART (if using direct UART instead of USB)
+#
+# If you get a permissions error: sudo usermod -aG dialout $USER (then re-login)
+# =============================================================================
+
 if __name__ == "__main__":
-    uploader = MissionUploader()
-
-    # This list would come from Web App JSON
-    # spec: https://github.com/iNavFlight/inav/blob/master/src/main/msp/msp_protocol.h
-    # The spec says: (WP#,lat, lon, alt, flags)
-    # https://github.com/iNavFlight/inav/blob/master/src/main/fc/fc_msp.c#L2959
 
     new_mission = [
         (42.3456347, -71.1132435, 12),
@@ -147,29 +224,14 @@ if __name__ == "__main__":
         (42.3458440, -71.1123549, 12),
     ]
 
-    print("Starting Upload...")
+    uploader = MissionUploader(port="/dev/ttyUSB0", baud=115200)
 
-    # set home first or it tweaks
-    uploader.upload_waypoint(0, 42.3456347, -71.1132435, 0, False)
-
+    print("Starting upload...")
     try:
-        # Start at Index 1 (Index 0 is Home/Origin)
-        for i, point in enumerate(new_mission):
-            waypoint_num = i + 1
-            is_last_point = i == len(new_mission) - 1
-
-            # Convert Altitude from Meters to CM for the function
-            alt_cm = point[2] * 100
-
-            uploader.upload_waypoint(
-                waypoint_num, 3, point[0], point[1], alt_cm, 2, 51, 0, is_last_point * 165
-            )
-
-        # CRITICAL: Save to EEPROM or it will vanish on reboot
+        uploader.upload_mission(new_mission)
         uploader.save_mission()
-        print("Upload Complete.")
-
+        print("\nUpload complete.")
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"\nError during upload: {e}")
     finally:
         uploader.close()
