@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
 """
 Dual IMX219 Sequential Capture Script for Raspberry Pi 5
-Captures RAW (SRGGB10) and RGB888 images from two cameras with locked 3A parameters.
-Supports RAM disk for high-speed captures with flush to permanent storage.
+Captures RGB888 images from two cameras with modifiable 3A parameters.
 """
 
 import os
 import time
 import json
 import pathlib
-import shutil
 from datetime import datetime, timezone
-from typing import Dict
-import numpy as np
 from PIL import Image
 from picamera2 import Picamera2
 
@@ -24,27 +20,23 @@ def ensure_dir(path: str):
 
 def init_camera(cam_num: int, exposure_time: int, analogue_gain: float):
     """
-    Initialize and configure a single camera with automatic 3A parameters.
-
     Args:
         cam_num: Camera index (0 or 1)
         exposure_time: Not used when 3A is enabled (kept for API compatibility)
         analogue_gain: Not used when 3A is enabled (kept for API compatibility)
-
     Returns:
         Configured Picamera2 instance
     """
     picam = Picamera2(cam_num)
 
-    # Create still configuration with RAW and main (RGB) streams
-    # RAW stream: SRGGB10 unpacked format
+    # Can have 2 streams if desired
     # Main stream: RGB888 for PNG output
+    # RAW stream: SRGGB10 unpacked format - deprecated
     # Display: None for performance
     config = picam.create_still_configuration(
         main={"format": "RGB888"},  # RGB888 for main stream
-        raw={"format": "SRGGB10"},  # RAW unpacked 10-bit Bayer
         display=None,  # No display for faster operation
-        buffer_count=2,  # Minimal buffer count
+        buffer_count=2,  # Minimal buffer count - research
     )
 
     picam.configure(config)
@@ -63,64 +55,47 @@ def init_camera(cam_num: int, exposure_time: int, analogue_gain: float):
 
 
 def capture_from_camera(
-    picam: Picamera2,
-    cam_num: int,
-    timestamp: str,
-    outdir: str,
-    burst_count: int = 1,
-    jpeg_quality: int = 90,
+    picam: Picamera2, # Currently configured Picamera2 instance
+    cam_num: int, # Track camera 0 or 1 for metadata
+    timestamp: str, # Want timestamps for metadata
+    outdir: str, # Pi OS file directory to be saved to
+    burst_count: int = 1, # number frames per capture
+    jpeg_quality: int = 90, # 0 = most losses, 100 = least losse
 ):
     """
-    Capture RAW and RGB888 images from a single camera with burst mode.
-
-    Args:
-        picam: Configured Picamera2 instance
-        cam_num: Camera number (0 or 1)
-        timestamp: Timestamp string for filenames
-        outdir: Output directory path
-        burst_count: Number of consecutive frames to capture
-        jpeg_quality: JPEG quality for RGB images (1-100)
-
+    Capture RGB888 images from a single camera with burst mode.
     Returns:
         Dictionary containing capture metadata for all burst captures
     """
     burst_captures = []
 
     for burst_idx in range(burst_count):
-        # Capture both streams atomically using a request
-        # This ensures main and raw come from the same frame
+        # Was formating as a capture request when getting RGB and RAW files.
+        # This ensured main and raw come from the same frame
         request = picam.capture_request()
         try:
-            # Extract arrays from both streams
+            # Extract arrays from rgb stream
             rgb_array = request.make_array("main")
-            raw_array = request.make_array("raw")
-
             # Get metadata from the request
             metadata = request.get_metadata()
         finally:
-            # Always release the request to free buffers
+            # Need to release the request to free buffers
             request.release()
 
         # Generate filenames with burst index
         base_name = f"{timestamp}_cam{cam_num}_burst{burst_idx:02d}"
         rgb_path = os.path.join(outdir, f"{base_name}_rgb.jpg")
-        raw_path = os.path.join(outdir, f"{base_name}_raw.npy")
 
         # Save RGB888 as JPEG (much faster than PNG)
         rgb_image = Image.fromarray(rgb_array, mode="RGB")
+        # Save argument comes from PIL. "Optimize" doesn't seem benefitial to our use case
         rgb_image.save(rgb_path, format="JPEG", quality=jpeg_quality, optimize=False)
-
-        # Save RAW as numpy array
-        np.save(raw_path, raw_array)
 
         # Prepare metadata for this capture
         capture_info = {
             "burst_index": burst_idx,
             "rgb_path": rgb_path,
-            "raw_path": raw_path,
             "rgb_shape": list(rgb_array.shape),
-            "raw_shape": list(raw_array.shape),
-            "raw_dtype": str(raw_array.dtype),
             "metadata": {
                 "ExposureTime": metadata.get("ExposureTime"),
                 "AnalogueGain": metadata.get("AnalogueGain"),
@@ -142,48 +117,35 @@ def capture_from_camera(
 
 
 def sequential_capture_cycle(
-    picam0: Picamera2,
-    picam1: Picamera2,
-    outdir: str,
-    burst_count: int = 1,
-    jpeg_quality: int = 90,
+    picam0: Picamera2, #camera0 instance
+    picam1: Picamera2, #camera1 instance
+    outdir: str, #output directory
+    burst_count: int = 1, #Number of captures taken by each camera in successive burst
+    jpeg_quality: int = 90, # 0 = most losses, 100 = least losse.
+    no_metadata: bool = False, 
 ):
     """
     Perform one complete capture cycle from both cameras sequentially.
-
-    Args:
-        picam0: Camera 0 instance
-        picam1: Camera 1 instance
-        outdir: Output directory
-        burst_count: Number of burst captures per camera
-        jpeg_quality: JPEG quality for RGB images
-        save_metadata: Whether to save JSON metadata file
-
     Returns:
         Tuple of (timestamp, capture_info_dict)
     """
     # Generate timestamp for this capture cycle
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
-
-    # Set out dir
-    outdir = os.path.expanduser("~/export")
+    # outdir set by systemd environment
+    ensure_dir(outdir)
 
     # Capture from Camera 0 (with burst)
     start_cam0 = time.time()
-    cam0_info = capture_from_camera(
-        picam0, 0, timestamp, outdir, burst_count, jpeg_quality
-    )
+    cam0_info = capture_from_camera(picam0, 0, timestamp, outdir, burst_count, jpeg_quality)
     cam0_duration = time.time() - start_cam0
 
     # Capture from Camera 1 (immediately after Camera 0 completes)
     start_cam1 = time.time()
-    cam1_info = capture_from_camera(
-        picam1, 1, timestamp, outdir, burst_count, jpeg_quality
-    )
+    cam1_info = capture_from_camera(picam1, 1, timestamp, outdir, burst_count, jpeg_quality)
     cam1_duration = time.time() - start_cam1
 
-    # Calculate inter-camera delay
-    inter_camera_delay = start_cam1 - start_cam0
+    # Calculate inter-camera delay for testing
+    # inter_camera_delay = start_cam1 - start_cam0
 
     # Save metadata JSON if requested
     metadata_dict = {
@@ -195,14 +157,17 @@ def sequential_capture_cycle(
             "camera_0_per_frame_s": cam0_duration / burst_count,
             "camera_1_duration_s": cam1_duration,
             "camera_1_per_frame_s": cam1_duration / burst_count,
-            "inter_camera_delay_s": inter_camera_delay,
+            # "inter_camera_delay_s": inter_camera_delay,
         },
         "camera_0": cam0_info,
         "camera_1": cam1_info,
     }
 
-    metadata_path = os.path.join(outdir, f"{timestamp}_metadata.json")
-    with open(metadata_path, "w") as f:
-        json.dump(metadata_dict, f, indent=2, default=str)
+    if not no_metadata:
+        metadata_path = os.path.join(outdir, f"{timestamp}_metadata.json")
+        with open(metadata_path, "w") as f:
+            json.dump(metadata_dict, f, indent=2, default=str)
+
+
 
     return timestamp, {"camera_0": cam0_info, "camera_1": cam1_info}
