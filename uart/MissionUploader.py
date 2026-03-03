@@ -1,6 +1,7 @@
 import serial  # Imports PySerial library, allows it to talk to UART HW
 import struct  # FC is in C and expects data in byte sizes. Python uses objects. struct smashes pthon objects into C style raw bytes
 import time
+import json
 
 
 class MissionUploader:
@@ -138,16 +139,16 @@ if __name__ == "__main__":
     # This list would come from Web App JSON
     # spec: https://github.com/iNavFlight/inav/blob/master/src/main/msp/msp_protocol.h
     # The spec says: (WP#,lat, lon, alt, flags)
-    new_mission = [
-        (42.3456347, -71.1132435, 12),
-        (42.3459037, -71.1128325, 12),
-        (42.3458440, -71.1123549, 12),
-    ]
+    try:
+        with open("/home/sr-design/agrodrone-system/waypoints.json", "r") as f:
+            new_mission = json.load(f)["waypoints"]
+    except Exception as e:
+        print("Error with waypoints file: ", e)
 
     print("Starting Upload...")
 
     # set home first or it tweaks
-    uploader.upload_waypoint(0, 42.3456347, -71.1132435, 0, False)
+    uploader.upload_waypoint(0, new_mission[0]["lat"], new_mission[0]["lng"], 0, False)
 
     try:
         # Start at Index 1 (Index 0 is Home/Origin)
@@ -156,10 +157,10 @@ if __name__ == "__main__":
             is_last_point = i == len(new_mission) - 1
 
             # Convert Altitude from Meters to CM for the function
-            alt_cm = point[2] * 100
+            alt_cm = 30 * 100 # hardcoded as 30 meters, but is this absolute altitude or delta above sea level?
 
             uploader.upload_waypoint(
-                waypoint_num, point[0], point[1], alt_cm, is_last_point
+                waypoint_num, point["lat"], point["lng"], alt_cm, is_last_point
             )
 
         # CRITICAL: Save to EEPROM or it will vanish on reboot

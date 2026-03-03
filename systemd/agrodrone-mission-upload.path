@@ -1,0 +1,9 @@
+# /etc/systemd/system/agrodrone-mission-upload.path
+[Unit]
+Description=Triggers mission upload for onboard Pi
+
+[Path]
+PathChanged=/home/sr-design/agrodrone-system/waypoints.json
+
+[Install]
+WantedBy=multi-user.target
