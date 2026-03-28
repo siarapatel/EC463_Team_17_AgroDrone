@@ -1,0 +1,46 @@
+# /etc/systemd/system/ndvi-capture.service
+#
+# Production unit — runs on boot, restarts on crash, exits cleanly on kill pin or SIGTERM.
+#
+# Deploy:
+#   sudo cp ndvi-capture.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable ndvi-capture.service
+#   sudo systemctl start ndvi-capture.service
+#
+# Useful commands:
+#   sudo systemctl status ndvi-capture.service
+#   journalctl -u ndvi-capture.service -f
+
+[Unit]
+Description=NDVI Dual Camera Capture
+# Wait for the OS to be fully up. libcamera/picamera2 needs the video
+# subsystem available, so we go after multi-user rather than basic.target.
+After=multi-user.target
+
+[Service]
+Type=simple
+User=sr-design
+WorkingDirectory=/home/sr-design/agrodrone-system
+
+# --- Runtime configuration ---
+# All tunables live here. 'systemctl show ndvi-capture' will display these,
+# making the active configuration fully observable without touching the script.
+Environment="NDVI_SAVE_PATH=/home/sr-design/agrodrone-system/flight-images"
+Environment="NDVI_CAPTURE_PIN=27"
+Environment="NDVI_KILL_PIN=17"
+# NDVI_TEST_MODE is intentionally absent — absence means production (0).
+
+ExecStart=/usr/bin/python3 /home/sr-design/agrodrone-system/ndvi_image_capture.py
+
+# Restart on crash/error but NOT on a clean exit (code 0).
+# A kill-pin or SIGTERM shutdown exits cleanly, so systemd will not restart.
+Restart=on-failure
+RestartSec=5
+
+# Journal logging — view with: journalctl -u ndvi-capture.service
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
