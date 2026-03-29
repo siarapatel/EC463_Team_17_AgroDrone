@@ -162,17 +162,21 @@ def sequential_capture(picam0: Picamera2, picam1: Picamera2) -> dict:
 # GPIO callbacks
 # ---------------------------------------------------------------------------
 
+_capture_lock = threading.Lock()
+
 def on_capture_press(picam0: Picamera2, picam1: Picamera2):
-    """Capture-pin callback: capture then optionally re-lock exposure."""
     global WP
     if _shutdown_event.is_set():
-        return  # Ignore presses arriving mid-shutdown
-    sequential_capture(picam0, picam1)
-    if WP % 5 == 0:
-        print(f"[WP {WP}] Re-locking exposure...")
-        sequential_reconfig(picam0, picam1)
-    WP += 1
-
+        return
+    if not _capture_lock.acquire(blocking=False):  # drop the call if already capturing
+        return
+    try:
+        sequential_capture(picam0, picam1)
+        if WP % 5 == 0:
+            sequential_reconfig(picam0, picam1)
+        WP += 1
+    finally:
+        _capture_lock.release()
 
 def on_kill_press():
     """Kill-pin callback: trigger clean shutdown."""
