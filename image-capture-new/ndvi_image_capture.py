@@ -20,9 +20,10 @@ import json
 # ---------------------------------------------------------------------------
 TEST_MODE   = os.environ.get("NDVI_TEST_MODE",   "0") == "1"
 TEST_COUNT  = int(os.environ.get("NDVI_TEST_COUNT",  "3"))
-SAVE_PATH   = os.environ.get("NDVI_SAVE_PATH",   "/home/sr-design/agrodrone-system/flight-images")
+IMAGE_SAVE_PATH   = os.environ.get("NDVI_SAVE_PATH",   "/home/sr-design/agrodrone-system/flight-images")
 CAPTURE_PIN = int(os.environ.get("NDVI_CAPTURE_PIN", "27"))
 KILL_PIN    = int(os.environ.get("NDVI_KILL_PIN",    "17"))
+FLIGHT_NUMBER = os.environ.get("OS_FLIGHT_NUMBER", "UnknownFlight")
 
 WP = 0  # Global waypoint counter
 
@@ -30,12 +31,12 @@ WP = 0  # Global waypoint counter
 # Output directory
 # ---------------------------------------------------------------------------
 try:
-    os.mkdir(SAVE_PATH)
-    print(f"Directory '{SAVE_PATH}' created successfully.")
+    os.mkdir(IMAGE_SAVE_PATH)
+    print(f"Directory '{IMAGE_SAVE_PATH}' created successfully.")
 except FileExistsError:
-    print(f"Directory '{SAVE_PATH}' already exists.")
+    print(f"Directory '{IMAGE_SAVE_PATH}' already exists.")
 except PermissionError:
-    print(f"Permission denied: Unable to create '{SAVE_PATH}'.")
+    print(f"Permission denied: Unable to create '{IMAGE_SAVE_PATH}'.")
 except Exception as e:
     print(f"An error occurred: {e}")
 
@@ -142,15 +143,15 @@ def sequential_capture(picam0: Picamera2, picam1: Picamera2) -> dict:
     Returns the metadata dict.
     """
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
-    ensure_dir(SAVE_PATH)
+    ensure_dir(IMAGE_SAVE_PATH)
 
     metadata_dict = {
         "capture_timestamp": timestamp,
         "waypoint": WP,
-        "camera_0": capture_from_camera(picam0, 0, timestamp, SAVE_PATH),
-        "camera_1": capture_from_camera(picam1, 1, timestamp, SAVE_PATH),
+        "camera_0": capture_from_camera(picam0, 0, timestamp, IMAGE_SAVE_PATH),
+        "camera_1": capture_from_camera(picam1, 1, timestamp, IMAGE_SAVE_PATH),
     }
-    metadata_path = os.path.join(SAVE_PATH, f"{timestamp}_metadata.json")
+    metadata_path = os.path.join(IMAGE_SAVE_PATH, f"{timestamp}_metadata.json")
     with open(metadata_path, "w") as f:
         json.dump(metadata_dict, f, indent=2, default=str)
 
@@ -222,7 +223,7 @@ def run_test(picam0: Picamera2, picam1: Picamera2):
     No GPIO hardware required.
     """
     global WP
-    print(f"TEST MODE: running {TEST_COUNT} capture cycle(s) into {SAVE_PATH}")
+    print(f"TEST MODE: running {TEST_COUNT} capture cycle(s) into {IMAGE_SAVE_PATH}")
     for _ in range(TEST_COUNT):
         if _shutdown_event.is_set():
             print("Shutdown during test — stopping early.")
@@ -242,7 +243,7 @@ def run_test(picam0: Picamera2, picam1: Picamera2):
 
 def main():
     print(f"Starting NDVI capture | mode={'TEST' if TEST_MODE else 'FLIGHT'} | "
-          f"save_path={SAVE_PATH}")
+          f"save_path={IMAGE_SAVE_PATH}")
 
     picam2_a = Picamera2(0)
     picam2_b = Picamera2(1)
@@ -257,7 +258,11 @@ def main():
         print("Keyboard interrupt received.")
     finally:
         stop_cameras(picam2_a, picam2_b)
-
+        flight_log_folder_path = "/home/sr-design/agrodrone-system/flight-logs" 
+        ensure_dir(flight_log_folder_path)
+        flight_log_path = os.path.join(flight_log_folder_path,f"{FLIGHT_NUMBER}.txt")
+        with open(flight_log_path, "w") as f:
+            f.write(f"Completed flight: {FLIGHT_NUMBER} with {WP} waypoints.\n")
 
 if __name__ == "__main__":
     main()
