@@ -7,6 +7,7 @@ import pathlib
 import os
 from gpiozero import Button
 import json
+import uuid
 
 # ---------------------------------------------------------------------------
 # Configuration via environment variables
@@ -14,16 +15,28 @@ import json
 #
 #   NDVI_TEST_MODE      "1" to run test captures instead of waiting for GPIO
 #   NDVI_TEST_COUNT     Number of test captures (default: 3)
-#   NDVI_SAVE_PATH      Output directory for images and metadata JSON
 #   NDVI_CAPTURE_PIN    BCM pin number for waypoint capture trigger (default: 27)
 #   NDVI_KILL_PIN       BCM pin number for graceful shutdown trigger (default: 17)
+#   SYSTEM_PATH         Root system directory (default: /home/sr-design/agrodrone-system)
 # ---------------------------------------------------------------------------
-TEST_MODE   = os.environ.get("NDVI_TEST_MODE",   "0") == "1"
-TEST_COUNT  = int(os.environ.get("NDVI_TEST_COUNT",  "3"))
-IMAGE_SAVE_PATH   = os.environ.get("NDVI_SAVE_PATH",   "/home/sr-design/agrodrone-system/flight-images")
-CAPTURE_PIN = int(os.environ.get("NDVI_CAPTURE_PIN", "27"))
-KILL_PIN    = int(os.environ.get("NDVI_KILL_PIN",    "17"))
-FLIGHT_NUMBER = os.environ.get("OS_FLIGHT_NUMBER", "UnknownFlight")
+TEST_MODE       = os.environ.get("NDVI_TEST_MODE",       "0") == "1"
+TEST_COUNT      = int(os.environ.get("NDVI_TEST_COUNT",  "3"))
+CAPTURE_PIN     = int(os.environ.get("NDVI_CAPTURE_PIN", "27"))
+KILL_PIN        = int(os.environ.get("NDVI_KILL_PIN",    "17"))
+SYSTEM_PATH =  os.environ.get("SYSTEM_PATH",  "/home/sr-design/agrodrone-system")
+WAYPOINTS_PATH  = os.path.join(SYSTEM_PATH, "waypoints.json")
+
+
+def read_fpid(waypoints_path: str) -> str:
+    """Read the flight plan ID from waypoints.json."""
+    with open(waypoints_path, "r") as f:
+        return json.load(f)["fpid"]
+
+
+MISSION_ID      = str(uuid.uuid4())
+FLIGHT_PLAN_ID  = read_fpid(WAYPOINTS_PATH)
+FLIGHT_PLAN_DIR = os.path.join(SYSTEM_PATH, "flightplans", FLIGHT_PLAN_ID)
+MISSION_PATH    = os.path.join(FLIGHT_PLAN_DIR, MISSION_ID)
 
 WP = 0  # Global waypoint counter
 
@@ -31,12 +44,13 @@ WP = 0  # Global waypoint counter
 # Output directory
 # ---------------------------------------------------------------------------
 try:
-    os.mkdir(IMAGE_SAVE_PATH)
-    print(f"Directory '{IMAGE_SAVE_PATH}' created successfully.")
+    pathlib.Path(FLIGHT_PLAN_DIR).mkdir(parents=True, exist_ok=True)
+    os.mkdir(MISSION_PATH)
+    print(f"Mission directory '{MISSION_PATH}' created.")
 except FileExistsError:
-    print(f"Directory '{IMAGE_SAVE_PATH}' already exists.")
+    print(f"Directory '{MISSION_PATH}' already exists.")
 except PermissionError:
-    print(f"Permission denied: Unable to create '{IMAGE_SAVE_PATH}'.")
+    print(f"Permission denied: Unable to create '{MISSION_PATH}'.")
 except Exception as e:
     print(f"An error occurred: {e}")
 
@@ -143,15 +157,16 @@ def sequential_capture(picam0: Picamera2, picam1: Picamera2) -> dict:
     Returns the metadata dict.
     """
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
-    ensure_dir(IMAGE_SAVE_PATH)
+    ensure_dir(MISSION_PATH)
 
     metadata_dict = {
         "capture_timestamp": timestamp,
         "waypoint": WP,
-        "camera_0": capture_from_camera(picam0, 0, timestamp, IMAGE_SAVE_PATH),
-        "camera_1": capture_from_camera(picam1, 1, timestamp, IMAGE_SAVE_PATH),
+        "camera_0": capture_from_camera(picam0, 0, timestamp, MISSION_PATH),
+        "camera_1": capture_from_camera(picam1, 1, timestamp, MISSION_PATH),
     }
-    metadata_path = os.path.join(IMAGE_SAVE_PATH, f"{timestamp}_metadata.json")
+
+    metadata_path = os.path.join(MISSION_PATH, f"{timestamp}_metadata.json")
     with open(metadata_path, "w") as f:
         json.dump(metadata_dict, f, indent=2, default=str)
 
@@ -183,8 +198,6 @@ def on_kill_press():
     """Kill-pin callback: trigger clean shutdown."""
     print(f"Kill pin (BCM {KILL_PIN}) triggered.")
     request_shutdown()
-    # I'll think of something better later
-    open("/tmp/offload_requested", "w").close() # So the rsyc triggering offload service has something to look for
     
 
 
@@ -223,7 +236,7 @@ def run_test(picam0: Picamera2, picam1: Picamera2):
     No GPIO hardware required.
     """
     global WP
-    print(f"TEST MODE: running {TEST_COUNT} capture cycle(s) into {IMAGE_SAVE_PATH}")
+    print(f"TEST MODE: running {TEST_COUNT} capture cycle(s) into {MISSION_PATH}")
     for _ in range(TEST_COUNT):
         if _shutdown_event.is_set():
             print("Shutdown during test — stopping early.")
@@ -243,7 +256,7 @@ def run_test(picam0: Picamera2, picam1: Picamera2):
 
 def main():
     print(f"Starting NDVI capture | mode={'TEST' if TEST_MODE else 'FLIGHT'} | "
-          f"save_path={IMAGE_SAVE_PATH}")
+          f"save_path={MISSION_PATH}")
 
     picam2_a = Picamera2(0)
     picam2_b = Picamera2(1)
@@ -258,11 +271,12 @@ def main():
         print("Keyboard interrupt received.")
     finally:
         stop_cameras(picam2_a, picam2_b)
-        flight_log_folder_path = "/home/sr-design/agrodrone-system/flight-logs" 
-        ensure_dir(flight_log_folder_path)
-        flight_log_path = os.path.join(flight_log_folder_path,f"{FLIGHT_NUMBER}.txt")
-        with open(flight_log_path, "w") as f:
-            f.write(f"Completed flight: {FLIGHT_NUMBER} with {WP} waypoints.\n")
+        ensure_dir(MISSION_PATH)
+        metadata_path = os.path.join(MISSION_PATH, "metadata.json")
+        with open(metadata_path, "w") as f:
+            f.write(f"Completed flight: {MISSION_ID} with {WP} waypoints.\n")
+        open("/tmp/offload_requested", "w").close()
+        print("Offload trigger written to /tmp/offload_requested")
 
 if __name__ == "__main__":
     main()

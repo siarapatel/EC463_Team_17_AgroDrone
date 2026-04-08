@@ -23,13 +23,7 @@ Type=simple
 User=sr-design
 WorkingDirectory=/home/sr-design/agrodrone-system
 
-# --- Runtime configuration ---
-# All tunables live here. 'systemctl show ndvi-capture' will display these,
-# making the active configuration fully observable without touching the script.
-Environment="NDVI_SAVE_PATH=/home/sr-design/agrodrone-system/flight-images"
-Environment="NDVI_CAPTURE_PIN=27"
-Environment="NDVI_KILL_PIN=17"
-# NDVI_TEST_MODE is intentionally absent — absence means production (0).
+EnvironmentFile=/home/sr-design/EC463_Team_17_AgroDrone/.env
 
 ExecStart=/usr/bin/python3 /home/sr-design/agrodrone-system/ndvi_image_capture.py
 

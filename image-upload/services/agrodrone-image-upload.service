@@ -1,0 +1,13 @@
+[Unit]
+Description=Upload NDVI images post-mission
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=sr-design
+EnvironmentFile=/home/sr-design/EC463_Team_17_AgroDrone/.env
+ExecStart=/bin/bash /home/sr-design/EC463_Team_17_AgroDrone/image-upload/src/image_upload.sh
+
+[Install]
+WantedBy=multi-user.target

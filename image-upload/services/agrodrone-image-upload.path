@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for offload trigger post-mission
+After=multi-user.target
+
+[Path]
+PathExists=/tmp/offload_requested
+
+[Install]
+WantedBy=multi-user.target
