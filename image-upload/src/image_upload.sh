@@ -24,10 +24,14 @@ fi
 
 echo "Uploading missions for flight plan: ${FPID}"
 
+REMOTE_HOST="${RSYNC_DEST%%:*}"
+REMOTE_BASE="${RSYNC_DEST#*:}"
+
 for mission_dir in "${FPID_DIR}"/*/; do
     [ -d "$mission_dir" ] || continue
     mission_id=$(basename "$mission_dir")
     echo "  Syncing mission ${mission_id}..."
+    ssh "$REMOTE_HOST" "mkdir -p ${REMOTE_BASE}/${FPID}/${mission_id}"
     rsync -avz "$mission_dir" "${RSYNC_DEST}/${FPID}/${mission_id}/" \
         || echo "  WARNING: rsync failed for ${mission_id}"
 done
@@ -35,6 +39,5 @@ done
 echo "Upload complete for flight plan ${FPID}."
 
 # Touch a file on the remote machine to trigger its systemd .path unit
-REMOTE_HOST="${RSYNC_DEST%%:*}"
 ssh "$REMOTE_HOST" "touch /tmp/images_sent"
 echo "Sent trigger to ${REMOTE_HOST}:/tmp/images_sent"
