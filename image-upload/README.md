@@ -9,6 +9,4 @@
 ## Prepare the systemd services ##
 `sudo cp -r services/* /etc/systemd/system`
 
-followed by:
-
 `sudo systemctl enable --now agrodrone-image-upload.path`
