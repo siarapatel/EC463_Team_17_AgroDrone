@@ -23,6 +23,12 @@ TEST_MODE       = os.environ.get("NDVI_TEST_MODE",       "0") == "1"
 TEST_COUNT      = int(os.environ.get("NDVI_TEST_COUNT",  "3"))
 CAPTURE_PIN     = int(os.environ.get("NDVI_CAPTURE_PIN", "27"))
 KILL_PIN        = int(os.environ.get("NDVI_KILL_PIN",    "17"))
+
+# PWM filtering: both pins are driven by a low-duty-cycle PWM that never fully
+# turns off.  Pulses shorter than these thresholds (normal PWM highs) are ignored;
+# only a sustained high >= threshold counts as an intentional press.
+CAPTURE_HOLD_TIME = 0.1   # seconds — tune to be above normal PWM pulse width
+KILL_HOLD_TIME    = 1.0   # seconds — longer to avoid accidental shutdown
 SYSTEM_PATH =  os.environ.get("SYSTEM_PATH",  "/home/sr-design/agrodrone-system")
 WAYPOINTS_PATH  = os.path.join(SYSTEM_PATH, "waypoints.json")
 
@@ -219,13 +225,14 @@ def run_gpio(picam0: Picamera2, picam1: Picamera2):
     """
     signal.signal(signal.SIGTERM, request_shutdown)
 
-    capture_button = Button(CAPTURE_PIN, pull_up=False)
-    kill_button    = Button(KILL_PIN,    pull_up=False)
+    capture_button = Button(CAPTURE_PIN, pull_up=False, hold_time=CAPTURE_HOLD_TIME)
+    kill_button    = Button(KILL_PIN,    pull_up=False, hold_time=KILL_HOLD_TIME)
 
-    capture_button.when_pressed = lambda: on_capture_press(picam0, picam1)
-    kill_button.when_pressed    = on_kill_press
+    capture_button.when_held = lambda: on_capture_press(picam0, picam1)
+    kill_button.when_held    = on_kill_press
 
-    print(f"Ready. Capture pin: BCM {CAPTURE_PIN} | Kill pin: BCM {KILL_PIN}")
+    print(f"Ready. Capture pin: BCM {CAPTURE_PIN} (hold={CAPTURE_HOLD_TIME}s) | "
+          f"Kill pin: BCM {KILL_PIN} (hold={KILL_HOLD_TIME}s)")
     _shutdown_event.wait()
     print("Exiting main loop.")
 

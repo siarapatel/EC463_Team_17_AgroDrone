@@ -1,0 +1,109 @@
+import serial
+import struct
+import time
+
+# MSP V2 Message Structure
+# Offset |    Usage     | CRC | Comment
+#   0    |      $       | No  | Same lead-in as V1
+#   1    |      X       | No  | 'X' in place of 'M' in V1
+#   2    |     type     | No  | '<' = request, '>' = response, '!' = error 
+#   3    |     flag     | Yes | uint8, usually 0, see https://github.com/iNavFlight/inav/wiki/MSP-V2#message-flags
+#   4    |   function   | Yes | uint16, https://github.com/iNavFlight/inav/tree/master/src/main/msp (uint16 = 2 bytes)
+#   6    | payload size | Yes | uint16 (little endian) payload size in bytes (uint16 = 2 bytes)
+#   8    |   payload    | Yes | n (up to 65535 bytes) payload 
+#  n+8   |   checksum   | No  | uint8, (n = payload size), crc8_dvb_s2 checksum
+
+############# Helper functions #############
+
+# Function to check if received checksum matches
+def CRC_DVB_S2_check(message) -> bool:
+	checksum = calculate_DVB_S2_checksum(message[3:-1])
+	if checksum == message[-1]:
+		return True
+	else:
+		print('CRC check failed')
+		print('Message CRC: ' + repr(message[-1]) + ', calculated CRC: ' + repr(checksum))
+		return False
+
+# Function to calculate the DVB-S2 CRC for MSP V2
+# I have actually no clue how the algorithm works, but it apparently does.
+def calculate_DVB_S2_checksum(data) -> int:
+	checksum = 0x00
+	for byte in data:
+		checksum ^= byte
+		for _ in range(8):
+			if checksum & 0x80: checksum = (checksum << 1) ^ 0xD5
+			else: checksum <<= 1
+			checksum &= 0xFF 
+	return checksum
+
+# Function to create an MSP V2 request
+def create_msp_request(function):
+	message = [0]*9		    # length constant as most requests don't contain payload
+	message[0] = ord('$')   # ASCII $ as integer, $ = message start
+	message[1] = ord('X')   # ASCII X as integer, X = MSP V2
+	message[2] = ord('<')	# ASCII < as integer, < = request
+	message[3] = 0		    # flag, 0 for almost all cases
+	message[4] = function	# function number (0 - 65535)
+	message[6] = 0		    # payload size (No payload for requests)
+#   message[8] = 0		    # payload (No payload for requests)
+	message[8] = calculate_DVB_S2_checksum(message[3:8])  # CRC8/DVB-S2 checksum at the end
+	return message
+
+# Function to parse MSP response
+def parse_msp_response(message):
+	if response[:3] != b'$X>':
+		print("Invalid response header")	# Messages without this header are not valid responses
+		return None
+	else:
+#		flag = message[3]			# currently not used
+		function = message[4]       # function number
+#		payload_size = message[6]   # currently not used
+		payload = response[8:-1]    # requested data
+		return function, payload
+
+######### Initialize some parameters #########
+
+# Configure the serial connection
+# UART interface on Raspberry Pi pins GPIO14 and GPIO15 (physical header pins 8 and 10)
+# Needs to be enabled in raspi-config first
+SERIAL_PORT = '/dev/serial0'
+BAUD_RATE = 115200	# Default for INAV MSP, can be changed in INAV Configurator if necessary
+
+# MSP commands, see https://github.com/iNavFlight/inav/tree/master/src/main/msp for full list
+MSP_NAV_STATUS	= 121 #Command to request NAV status (mode, state, activeWpAction, activeWpNumber, error, heading hold target)
+# MSP_ACTIVEBOXES	= 113 #Active boxes provide lots of system info including arming, RTH, POSHOLD, NAV WP
+
+############ Program starts here ############
+
+# Open serial port
+ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
+# Execute loop
+# The only that happens all the time is polling
+while 1:
+	# Create request
+	msp_request = create_msp_request(MSP_NAV_STATUS)
+	# msp_request = create_msp_request(MSP_ACTIVEBOXES) # hoping it doesn't come down to needing this
+
+	ser.write(msp_request)				# Send request
+	response = ser.read(ser.in_waiting)	# Read response
+	
+	if response:
+		if CRC_DVB_S2_check(response):
+			function, payload = parse_msp_response(response)
+			if function == MSP_NAV_STATUS:
+				# Parse nav data (bytes 0-3 of the payload)
+				nav_mode, nav_state = struct.unpack('<hh', payload[:4])
+				# Parse waypoint data (bytes 4-7 of the payload)
+				nav_activeWpNumber, nav_activeWpAction = struct.unpack('<hh', payload[4:8])
+				# Parse nav data (bytes 0-3 of the payload)	
+				nav_error, nav_headingHoldTarget = struct.unpack('<hh', payload[8:12]) 				
+				# Print values
+				print('nav mode = {:+f}, nav state = {:+f}, active WP # = {:+d}, active WP action = {:+d}, nav error = {:+f}, target hading = {:+f}'.format(nav_mode, nav_state, nav_activeWpAction, nav_activeWpNumber, nav_error, nav_headingHoldTarget))
+			else:
+				print('Unexpected function: ' + repr(function))		
+		else:
+			print('CRC check failed')
+	else:
+		print("No response received")
+	time.sleep(0.2)
