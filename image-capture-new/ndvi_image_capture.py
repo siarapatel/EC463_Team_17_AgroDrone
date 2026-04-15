@@ -1,35 +1,30 @@
 from picamera2 import Picamera2
+import json
+import os
+import pathlib
+import select
 import signal
+import socket
+import sys
 import threading
 import time
-from datetime import datetime, timezone
-import pathlib
-import os
-from gpiozero import Button
-import json
 import uuid
+from datetime import datetime, timezone
 
 # ---------------------------------------------------------------------------
 # Configuration via environment variables
 # Set in the systemd unit file — never hardcoded here.
 #
-#   NDVI_TEST_MODE      "1" to run test captures instead of waiting for GPIO
-#   NDVI_TEST_COUNT     Number of test captures (default: 3)
-#   NDVI_CAPTURE_PIN    BCM pin number for waypoint capture trigger (default: 27)
-#   NDVI_KILL_PIN       BCM pin number for graceful shutdown trigger (default: 17)
-#   SYSTEM_PATH         Root system directory (default: /home/sr-design/agrodrone-system)
+#   NDVI_TEST_MODE         "1" to run test captures instead of connecting to UART service
+#   NDVI_TEST_COUNT        Number of test captures (default: 3)
+#   MSP_EVENTS_SOCKET_PATH Path to msp_uart_service events socket (default: /run/agrodrone/msp-events.sock)
+#   SYSTEM_PATH            Root system directory (default: /home/sr-design/agrodrone-system)
 # ---------------------------------------------------------------------------
-TEST_MODE       = os.environ.get("NDVI_TEST_MODE",       "0") == "1"
-TEST_COUNT      = int(os.environ.get("NDVI_TEST_COUNT",  "3"))
-CAPTURE_PIN     = int(os.environ.get("NDVI_CAPTURE_PIN", "27"))
-KILL_PIN        = int(os.environ.get("NDVI_KILL_PIN",    "17"))
+TEST_MODE   = os.environ.get("NDVI_TEST_MODE",  "0") == "1"
+TEST_COUNT  = int(os.environ.get("NDVI_TEST_COUNT", "3"))
+SYSTEM_PATH = os.environ.get("SYSTEM_PATH", "/home/sr-design/agrodrone-system")
+MSP_EVENTS_SOCKET_PATH = os.environ.get("MSP_EVENTS_SOCKET_PATH", "/run/agrodrone/msp-events.sock")
 
-# PWM filtering: both pins are driven by a low-duty-cycle PWM that never fully
-# turns off.  Pulses shorter than these thresholds (normal PWM highs) are ignored;
-# only a sustained high >= threshold counts as an intentional press.
-CAPTURE_HOLD_TIME = 0.1   # seconds — tune to be above normal PWM pulse width
-KILL_HOLD_TIME    = 1.0   # seconds — longer to avoid accidental shutdown
-SYSTEM_PATH =  os.environ.get("SYSTEM_PATH",  "/home/sr-design/agrodrone-system")
 WAYPOINTS_PATH  = os.path.join(SYSTEM_PATH, "waypoints.json")
 
 
@@ -44,7 +39,7 @@ FLIGHT_PLAN_ID  = read_fpid(WAYPOINTS_PATH)
 FLIGHT_PLAN_DIR = os.path.join(SYSTEM_PATH, "flightplans", FLIGHT_PLAN_ID)
 MISSION_PATH    = os.path.join(FLIGHT_PLAN_DIR, MISSION_ID)
 
-WP = 0  # Global waypoint counter
+WP = 0  # Current waypoint number — set from polled nav data in flight mode
 
 # ---------------------------------------------------------------------------
 # Output directory
@@ -62,14 +57,25 @@ except Exception as e:
 
 
 # ---------------------------------------------------------------------------
-# Shared shutdown event — set by kill pin or SIGTERM, unblocks main loop
+# Shared shutdown state
 # ---------------------------------------------------------------------------
-_shutdown_event = threading.Event()
+_shutdown_event  = threading.Event()
+_offload_on_exit = False   # True only on clean mission shutdown (SIGTERM / nav state)
+
+
+class _MSPTransientError(Exception):
+    """Raised when we cannot reach the MSP service; lets systemd restart the unit."""
+
+
+class _MissionSyncError(Exception):
+    """Raised when capture state and hub state diverge in a way we cannot recover."""
 
 
 def request_shutdown(signum=None, frame=None):
-    """Signal handler and kill-pin callback: request a clean exit."""
+    """Signal handler / nav-state callback: request a clean exit and queue offload."""
+    global _offload_on_exit
     print("Shutdown requested.")
+    _offload_on_exit = True
     _shutdown_event.set()
 
 
@@ -181,66 +187,138 @@ def sequential_capture(picam0: Picamera2, picam1: Picamera2) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# GPIO callbacks
+# Capture callback (called from both flight and test modes)
 # ---------------------------------------------------------------------------
 
 _capture_lock = threading.Lock()
 
 def on_capture_press(picam0: Picamera2, picam1: Picamera2):
-    global WP
+    """
+    Trigger a dual-camera capture. Non-blocking: drops the call if a capture
+    is already in progress. WP must be set by the caller before invoking this.
+    """
     if _shutdown_event.is_set():
         return
-    if not _capture_lock.acquire(blocking=False):  # drop the call if already capturing
+    if not _capture_lock.acquire(blocking=False):  # drop if already capturing
         return
     try:
         sequential_capture(picam0, picam1)
         if WP % 5 == 0:
             sequential_reconfig(picam0, picam1)
-        WP += 1
     finally:
         _capture_lock.release()
-
-def on_kill_press():
-    """Kill-pin callback: trigger clean shutdown."""
-    print(f"Kill pin (BCM {KILL_PIN}) triggered.")
-    request_shutdown()
-    
 
 
 # ---------------------------------------------------------------------------
 # Run modes
 # ---------------------------------------------------------------------------
 
-def run_gpio(picam0: Picamera2, picam1: Picamera2):
+_MAX_RECONNECT   = 5
+_RECONNECT_DELAY = 3.0  # seconds between reconnect attempts
+
+
+def run_flight(picam0: Picamera2, picam1: Picamera2):
     """
     Production flight mode.
-    Blocks on _shutdown_event until the kill pin or SIGTERM fires.
+    Connects to the MSP events socket and consumes mission status snapshots:
+      mission_status.waypoint          → capture exactly once per waypoint
+      mission_status.mission_complete  → begin clean shutdown
+
+    The hub publishes state snapshots rather than edge-triggered events. That
+    keeps reconnect behavior simple: on reconnect we resume from the latest
+    known status. If the waypoint number jumps, we fail loudly instead of
+    silently skipping captures.
+
+    Transient disconnects are retried up to _MAX_RECONNECT times. On exhaustion,
+    raises _MSPTransientError so systemd can restart this unit without triggering
+    the post-mission image offload.
     """
-    """ I don't understand this line, but allegedly:
-        Without this line:
-            SIGTERM would immediately terminate the process
-            Your cleanup (stop_cameras, etc.) might not run
-        With it:
-            You get a graceful shutdown path
-    """
+    global WP
+
     signal.signal(signal.SIGTERM, request_shutdown)
 
-    capture_button = Button(CAPTURE_PIN, pull_up=False, hold_time=CAPTURE_HOLD_TIME)
-    kill_button    = Button(KILL_PIN,    pull_up=False, hold_time=KILL_HOLD_TIME)
+    while not _shutdown_event.is_set():
+        # --- Connect with retries ---
+        sock = None
+        for attempt in range(1, _MAX_RECONNECT + 1):
+            if _shutdown_event.is_set():
+                return
+            try:
+                s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                s.connect(MSP_EVENTS_SOCKET_PATH)
+                sock = s
+                break
+            except (FileNotFoundError, ConnectionRefusedError) as e:
+                print(f"Cannot connect to MSP events socket "
+                      f"(attempt {attempt}/{_MAX_RECONNECT}): {e}")
+                time.sleep(_RECONNECT_DELAY)
 
-    capture_button.when_held = lambda: on_capture_press(picam0, picam1)
-    kill_button.when_held    = on_kill_press
+        if sock is None:
+            raise _MSPTransientError(
+                f"Cannot reach MSP events socket at {MSP_EVENTS_SOCKET_PATH} "
+                f"after {_MAX_RECONNECT} attempts"
+            )
 
-    print(f"Ready. Capture pin: BCM {CAPTURE_PIN} (hold={CAPTURE_HOLD_TIME}s) | "
-          f"Kill pin: BCM {KILL_PIN} (hold={KILL_HOLD_TIME}s)")
-    _shutdown_event.wait()
-    print("Exiting main loop.")
+        print(f"Connected to MSP events socket at {MSP_EVENTS_SOCKET_PATH}")
+
+        # --- Event read loop ---
+        buf = b""
+        try:
+            while not _shutdown_event.is_set():
+                r, _, _ = select.select([sock], [], [], 1.0)
+                if not r:
+                    continue
+
+                try:
+                    chunk = sock.recv(4096)
+                except OSError as e:
+                    print(f"Socket error: {e} — will retry connection.")
+                    break
+                if not chunk:
+                    print("MSP events socket closed — will retry.")
+                    break
+
+                buf += chunk
+                while b"\n" in buf:
+                    line_bytes, buf = buf.split(b"\n", 1)
+                    try:
+                        event = json.loads(line_bytes)
+                    except json.JSONDecodeError:
+                        continue
+
+                    if event.get("type") != "mission_status":
+                        continue
+
+                    if event.get("mission_complete"):
+                        print("Mission complete — shutting down.")
+                        request_shutdown()
+                        break
+
+                    next_wp = int(event.get("waypoint", 0))
+                    if next_wp <= 0 or next_wp == WP:
+                        continue
+                    if next_wp < WP:
+                        raise _MissionSyncError(
+                            f"Waypoint went backward: local={WP}, hub={next_wp}"
+                        )
+                    if next_wp > WP + 1:
+                        raise _MissionSyncError(
+                            f"Missed waypoint transition: local={WP}, hub={next_wp}"
+                        )
+
+                    WP = next_wp
+                    on_capture_press(picam0, picam1)
+
+        finally:
+            sock.close()
+
+    print("Exiting flight loop.")
 
 
 def run_test(picam0: Picamera2, picam1: Picamera2):
     """
     Test mode: fire NDVI_TEST_COUNT capture cycles with a short delay.
-    No GPIO hardware required.
+    No socket or hardware required.
     """
     global WP
     print(f"TEST MODE: running {TEST_COUNT} capture cycle(s) into {MISSION_PATH}")
@@ -253,7 +331,7 @@ def run_test(picam0: Picamera2, picam1: Picamera2):
             print(f"[WP {WP}] Re-locking exposure...")
             sequential_reconfig(picam0, picam1)
         WP += 1
-        time.sleep(0.5) #fine now that we only capture once per waypoint
+        time.sleep(0.5)
     print("Test complete.")
 
 
@@ -262,6 +340,8 @@ def run_test(picam0: Picamera2, picam1: Picamera2):
 # ---------------------------------------------------------------------------
 
 def main():
+    global _offload_on_exit
+
     print(f"Starting NDVI capture | mode={'TEST' if TEST_MODE else 'FLIGHT'} | "
           f"save_path={MISSION_PATH}")
 
@@ -269,11 +349,20 @@ def main():
     picam2_b = Picamera2(1)
     start_cameras(picam2_a, picam2_b)
 
+    exit_status = 0
     try:
         if TEST_MODE:
             run_test(picam2_a, picam2_b)
+            _offload_on_exit = True  # test runs always offload
         else:
-            run_gpio(picam2_a, picam2_b)
+            run_flight(picam2_a, picam2_b)
+    except _MSPTransientError as e:
+        # MSP service unreachable — let systemd restart us; do NOT trigger offload
+        print(f"[TRANSIENT ERROR] {e}")
+        exit_status = 1
+    except _MissionSyncError as e:
+        print(f"[SYNC ERROR] {e}")
+        exit_status = 2
     except KeyboardInterrupt:
         print("Keyboard interrupt received.")
     finally:
@@ -282,8 +371,12 @@ def main():
         metadata_path = os.path.join(MISSION_PATH, "metadata.json")
         with open(metadata_path, "w") as f:
             f.write(f"Completed flight: {MISSION_ID} with {WP} waypoints.\n")
-        open("/tmp/offload_requested", "w").close()
-        print("Offload trigger written to /tmp/offload_requested")
+        if _offload_on_exit:
+            open("/tmp/offload_requested", "w").close()
+            print("Offload trigger written to /tmp/offload_requested")
+
+    if exit_status:
+        sys.exit(exit_status)
 
 if __name__ == "__main__":
     main()

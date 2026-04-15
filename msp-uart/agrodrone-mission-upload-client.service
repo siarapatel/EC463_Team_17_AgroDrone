@@ -1,0 +1,12 @@
+[Unit]
+Description=Send waypoint upload request to MSP UART service
+After=agrodrone-msp-uart.service
+Requires=agrodrone-msp-uart.service
+
+[Service]
+Type=oneshot
+User=sr-design
+EnvironmentFile=/home/sr-design/EC463_Team_17_AgroDrone/.env
+ExecStart=/usr/bin/python3 /home/sr-design/EC463_Team_17_AgroDrone/msp-uart/mission_upload_client.py
+StandardOutput=journal
+StandardError=journal

@@ -16,7 +16,9 @@
 Description=NDVI Dual Camera Capture
 # Wait for the OS to be fully up. libcamera/picamera2 needs the video
 # subsystem available, so we go after multi-user rather than basic.target.
-After=multi-user.target
+# Also requires the MSP UART service to be running so the nav socket is available.
+After=multi-user.target agrodrone-msp-uart.service
+Requires=agrodrone-msp-uart.service
 
 [Service]
 Type=simple
@@ -31,6 +33,7 @@ ExecStart=/usr/bin/python3 /home/sr-design/agrodrone-system/ndvi_image_capture.p
 # A kill-pin or SIGTERM shutdown exits cleanly, so systemd will not restart.
 Restart=on-failure
 RestartSec=5
+RestartPreventExitStatus=2
 
 # Journal logging — view with: journalctl -u ndvi-capture.service
 StandardOutput=journal
