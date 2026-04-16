@@ -196,15 +196,47 @@ The following checks were run during this session:
   - `read_msp_v2_response()` parses a valid `MSP_NAV_STATUS` response
   - `_mission_status_from_nav()` returns the expected snapshot shape
 
-## Remaining manual validation before/after ship
+## On-device validation (completed 2026-04-16)
 
-These were not possible to fully validate in this local environment and should
-be checked on-device:
+End-to-end bench test performed using a laptop running `fake_fc_laptop.py` over
+a USB-to-UART (FT232R) adapter wired to the main Pi's `/dev/serial0`.
 
-1. `systemd` startup ordering on the Raspberry Pi
-2. UART hub startup with the real flight controller attached
-3. one mission upload through `msp-control.sock`
-4. one capture run through `msp-events.sock`
-5. post-mission `/tmp/offload_requested` behavior
-6. offloaded runtime script placement under `/home/sr-design/agrodrone-system`
+### Fixes applied during validation
+
+- **MSP NAV payload format corrected** — `_parse_nav_status()` updated from a
+  12-byte `<hhhhhh` struct to the correct 7-byte `<BBBBBh` INAV layout.  Without
+  this fix the service silently dropped every valid response.
+- **Python stdout buffering fixed** — added `-u` to `ExecStart` in
+  `msp-uart/agrodrone-msp-uart.service` so `print()` output reaches `journald`
+  immediately instead of being swallowed by the full-buffer default.
+
+### Results
+
+1. **systemd startup ordering** — `agrodrone-msp-uart.service` starts cleanly;
+   `sudo journalctl -u agrodrone-msp-uart -f` now shows service print output.
+2. **UART hub polling** — Pi polls `MSP_NAV_STATUS` at 5 Hz; fake FC responds
+   correctly to every request.
+3. **Events socket** — `fake_fc/watch_events.py` connects to
+   `/run/agrodrone/msp-events.sock` and receives one `mission_status` snapshot
+   per state change (deduplication confirmed working).
+4. **Full nominal scenario validated** — sequence of events received in order:
+
+   ```
+   {"mission_complete": false, "type": "mission_status", "waypoint": 0}
+   {"mission_complete": false, "type": "mission_status", "waypoint": 1}
+   {"mission_complete": false, "type": "mission_status", "waypoint": 2}
+   {"mission_complete": false, "type": "mission_status", "waypoint": 3}
+   {"mission_complete": true,  "type": "mission_status", "waypoint": 3}
+   ```
+
+5. **Last-status replay on reconnect** — confirmed: a newly connecting
+   `watch_events` client immediately receives the last cached snapshot (expected
+   behaviour for mid-mission reconnects).
+
+### Remaining items
+
+- One mission upload through `msp-control.sock` (not yet tested)
+- Post-mission `/tmp/offload_requested` behaviour
+- `ndvi_image_capture.py` capture run triggered by `msp-events.sock`
+- Real flight controller substituted for fake FC
 
