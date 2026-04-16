@@ -99,16 +99,16 @@ def read_msp_v2_request(ser):
 
 
 def nav_payload(nav_mode: int, nav_state: int, wp_num: int, wp_action: int) -> bytes:
-    nav_error = 0
-    nav_heading_hold_target = 0
+    # INAV format: uint8 mode, uint8 state, uint8 action, uint8 wp_num,
+    #              uint8 error, int16 heading  (7 bytes total)
     return struct.pack(
-        "<hhhhhh",
+        "<BBBBBh",
         nav_mode,
         nav_state,
-        wp_num,
         wp_action,
-        nav_error,
-        nav_heading_hold_target,
+        wp_num,
+        0,   # nav_error
+        0,   # nav_headingHoldTarget
     )
 
 
@@ -202,8 +202,8 @@ def main() -> None:
                 current_payload = sequence[sequence_index]
                 ser.write(build_msp_v2_response(MSP_NAV_STATUS, current_payload))
 
-                nav_mode, nav_state, wp_num, wp_action, _, _ = struct.unpack(
-                    "<hhhhhh", current_payload
+                nav_mode, nav_state, wp_action, wp_num, _, _ = struct.unpack(
+                    "<BBBBBh", current_payload
                 )
                 print(
                     f"[fake-fc] NAV reply | mode={nav_mode} state={nav_state} "

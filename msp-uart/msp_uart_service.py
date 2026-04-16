@@ -119,11 +119,21 @@ def read_msp_v2_response(ser) -> Optional[tuple]:
 
 
 def _parse_nav_status(payload: bytes) -> Optional[dict]:
-    """Parse raw MSP_NAV_STATUS 12-byte payload into a dict of named fields."""
-    if len(payload) < 12:
+    """
+    Parse raw MSP_NAV_STATUS payload into a dict of named fields.
+
+    INAV encodes this as 5 uint8 fields followed by one int16 (7 bytes total):
+      uint8  nav_mode
+      uint8  nav_state
+      uint8  nav_activeWpAction
+      uint8  nav_activeWpNumber
+      uint8  nav_error
+      int16  nav_headingHoldTarget
+    """
+    if len(payload) < 7:
         return None
-    nav_mode, nav_state, nav_activeWpNumber, nav_activeWpAction, \
-        nav_error, nav_headingHoldTarget = struct.unpack("<hhhhhh", payload[:12])
+    nav_mode, nav_state, nav_activeWpAction, nav_activeWpNumber, \
+        nav_error, nav_headingHoldTarget = struct.unpack("<BBBBBh", payload[:7])
     return {
         "nav_mode":              nav_mode,
         "nav_state":             nav_state,
