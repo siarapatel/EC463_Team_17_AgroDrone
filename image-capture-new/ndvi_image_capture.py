@@ -34,26 +34,26 @@ def read_fpid(waypoints_path: str) -> str:
         return json.load(f)["fpid"]
 
 
-MISSION_ID      = str(uuid.uuid4())
-FLIGHT_PLAN_ID  = read_fpid(WAYPOINTS_PATH)
-FLIGHT_PLAN_DIR = os.path.join(SYSTEM_PATH, "flightplans", FLIGHT_PLAN_ID)
-MISSION_PATH    = os.path.join(FLIGHT_PLAN_DIR, MISSION_ID)
+FLIGHT_PLAN_ID  = None
+FLIGHT_PLAN_DIR = None
+MISSION_ID      = None
+MISSION_PATH    = None
 
 WP = 0  # Current waypoint number — set from polled nav data in flight mode
 
-# ---------------------------------------------------------------------------
-# Output directory
-# ---------------------------------------------------------------------------
-try:
+
+def _init_mission_dir():
+    """Create the per-mission output directory on first capture, not at import time."""
+    global FLIGHT_PLAN_ID, FLIGHT_PLAN_DIR, MISSION_ID, MISSION_PATH
+    if MISSION_ID is not None:
+        return
+    FLIGHT_PLAN_ID  = read_fpid(WAYPOINTS_PATH)
+    FLIGHT_PLAN_DIR = os.path.join(SYSTEM_PATH, "flightplans", FLIGHT_PLAN_ID)
+    MISSION_ID      = str(uuid.uuid4())
+    MISSION_PATH    = os.path.join(FLIGHT_PLAN_DIR, MISSION_ID)
     pathlib.Path(FLIGHT_PLAN_DIR).mkdir(parents=True, exist_ok=True)
     os.mkdir(MISSION_PATH)
     print(f"Mission directory '{MISSION_PATH}' created.")
-except FileExistsError:
-    print(f"Directory '{MISSION_PATH}' already exists.")
-except PermissionError:
-    print(f"Permission denied: Unable to create '{MISSION_PATH}'.")
-except Exception as e:
-    print(f"An error occurred: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -199,6 +199,7 @@ def on_capture_press(picam0: Picamera2, picam1: Picamera2):
     """
     if _shutdown_event.is_set():
         return
+    _init_mission_dir()
     if not _capture_lock.acquire(blocking=False):  # drop if already capturing
         return
     try:
@@ -263,6 +264,7 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
 
         # --- Event read loop ---
         buf = b""
+        synced = False  # catch up to hub's current WP on first event; enforce +1 after
         try:
             while not _shutdown_event.is_set():
                 r, _, _ = select.select([sock], [], [], 1.0)
@@ -295,7 +297,18 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
                         break
 
                     next_wp = int(event.get("waypoint", 0))
-                    if next_wp <= 0 or next_wp == WP:
+                    if next_wp <= 0:
+                        continue
+
+                    if not synced:
+                        # First event after connect: catch up to hub's current state.
+                        # Captures for this waypoint in case we joined a live flight.
+                        WP = next_wp
+                        synced = True
+                        on_capture_press(picam0, picam1)
+                        continue
+
+                    if next_wp == WP:
                         continue
                     if next_wp < WP:
                         raise _MissionSyncError(
@@ -345,9 +358,13 @@ def main():
     print(f"Starting NDVI capture | mode={'TEST' if TEST_MODE else 'FLIGHT'} | "
           f"save_path={MISSION_PATH}")
 
-    picam2_a = Picamera2(0)
-    picam2_b = Picamera2(1)
-    start_cameras(picam2_a, picam2_b)
+    try:
+        picam2_a = Picamera2(0)
+        picam2_b = Picamera2(1)
+        start_cameras(picam2_a, picam2_b)
+    except Exception as e:
+        print(f"[FATAL] Camera initialization failed: {e}")
+        sys.exit(3)
 
     exit_status = 0
     try:
@@ -367,10 +384,11 @@ def main():
         print("Keyboard interrupt received.")
     finally:
         stop_cameras(picam2_a, picam2_b)
-        ensure_dir(MISSION_PATH)
-        metadata_path = os.path.join(MISSION_PATH, "metadata.json")
-        with open(metadata_path, "w") as f:
-            f.write(f"Completed flight: {MISSION_ID} with {WP} waypoints.\n")
+        if MISSION_PATH is not None:
+            ensure_dir(MISSION_PATH)
+            metadata_path = os.path.join(MISSION_PATH, "metadata.json")
+            with open(metadata_path, "w") as f:
+                f.write(f"Completed flight: {MISSION_ID} with {WP} waypoints.\n")
         if _offload_on_exit:
             open("/tmp/offload_requested", "w").close()
             print("Offload trigger written to /tmp/offload_requested")

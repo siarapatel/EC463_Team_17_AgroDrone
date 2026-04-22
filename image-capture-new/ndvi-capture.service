@@ -33,7 +33,7 @@ ExecStart=/usr/bin/python3 /home/sr-design/agrodrone-system/ndvi_image_capture.p
 # A kill-pin or SIGTERM shutdown exits cleanly, so systemd will not restart.
 Restart=on-failure
 RestartSec=5
-RestartPreventExitStatus=2
+RestartPreventExitStatus=2 3
 
 # Journal logging — view with: journalctl -u ndvi-capture.service
 StandardOutput=journal
