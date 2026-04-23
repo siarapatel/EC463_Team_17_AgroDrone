@@ -153,10 +153,12 @@ def _mission_status_from_nav(nav: dict) -> dict:
     if nav["nav_activeWpAction"] == WAYPOINT_ACTION and nav["nav_activeWpNumber"] > 0:
         waypoint = nav["nav_activeWpNumber"]
 
+    armed = nav["nav_state"] > 0
     mission_complete = nav["nav_mode"] == 2 and nav["nav_state"] == 10
     return {
         "type": "mission_status",
         "waypoint": waypoint,
+        "armed": armed,
         "mission_complete": mission_complete,
     }
 

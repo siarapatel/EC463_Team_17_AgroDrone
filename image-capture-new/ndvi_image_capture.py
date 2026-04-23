@@ -238,6 +238,9 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
 
     signal.signal(signal.SIGTERM, request_shutdown)
 
+    # Persists across reconnects: once a mission is underway, disarm triggers offload.
+    mission_started = False
+
     while not _shutdown_event.is_set():
         # --- Connect with retries ---
         sock = None
@@ -291,10 +294,22 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
                     if event.get("type") != "mission_status":
                         continue
 
+                    armed = event.get("armed", False)
+
+                    if not armed:
+                        if mission_started:
+                            print("Drone disarmed after mission — initiating offload.")
+                            request_shutdown()
+                        # Pre-arm idle or post-disarm: nothing to do.
+                        continue
+
+                    if not mission_started:
+                        mission_started = True
+                        print("Drone armed — entering capture mode.")
+
                     if event.get("mission_complete"):
-                        print("Mission complete — shutting down.")
-                        request_shutdown()
-                        break
+                        print("All waypoints complete — waiting for disarm to offload.")
+                        continue
 
                     next_wp = int(event.get("waypoint", 0))
                     if next_wp <= 0:
