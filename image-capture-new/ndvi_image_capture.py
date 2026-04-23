@@ -24,7 +24,7 @@ TEST_MODE   = os.environ.get("NDVI_TEST_MODE",  "0") == "1"
 TEST_COUNT  = int(os.environ.get("NDVI_TEST_COUNT", "3"))
 SYSTEM_PATH = os.environ.get("SYSTEM_PATH", "/home/sr-design/agrodrone-system")
 MSP_EVENTS_SOCKET_PATH = os.environ.get("MSP_EVENTS_SOCKET_PATH", "/run/agrodrone/msp-events.sock")
-
+CAPTURE_TRIGGER_PATH = "/tmp/capture_start.txt"
 WAYPOINTS_PATH  = os.path.join(SYSTEM_PATH, "waypoints.json")
 
 
@@ -348,6 +348,9 @@ def main():
     picam2_a = Picamera2(0)
     picam2_b = Picamera2(1)
     start_cameras(picam2_a, picam2_b)
+
+    if os.path.exists(CAPTURE_TRIGGER_PATH):
+    	os.remove(CAPTURE_TRIGGER_PATH)
 
     exit_status = 0
     try:

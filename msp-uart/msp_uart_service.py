@@ -302,6 +302,7 @@ def serial_loop(shutdown: threading.Event) -> None:
             if result is not None:
                 function, payload = result
                 if function == MSP_NAV_STATUS:
+                    os.write("/tmp/capture_start.txt")
                     nav = _parse_nav_status(payload)
                     if nav:
                         _broadcast_status(_mission_status_from_nav(nav))

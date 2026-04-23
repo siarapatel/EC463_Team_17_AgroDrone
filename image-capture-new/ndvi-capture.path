@@ -1,0 +1,10 @@
+[Unit]
+Description=Trigger to capture script to begin
+After=agrodrone-msp-uart.service
+Requires=agrodrone-msp-uart.service
+
+[Path]
+PathChanged=/tmp/capture_start.txt
+
+[Install]
+WantedBy=multi-user.target
