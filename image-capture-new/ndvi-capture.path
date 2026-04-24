@@ -1,5 +1,20 @@
+# /etc/systemd/system/ndvi-capture.path
+#
+# Watches for /tmp/capture_start.txt written by agrodrone-msp-uart.service
+# when the drone arms (nav_state transitions 0 → >0).
+# Activates ndvi-capture.service, which deletes the file on startup.
+#
+# Deploy:
+#   sudo cp ndvi-capture.path /etc/systemd/system/
+#   sudo cp ndvi-capture.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable ndvi-capture.path
+#   sudo systemctl start ndvi-capture.path
+#
+# Do NOT enable ndvi-capture.service directly — it is started by this unit.
+
 [Unit]
-Description=Trigger to capture script to begin
+Description=Watch for NDVI capture start trigger
 After=agrodrone-msp-uart.service
 Requires=agrodrone-msp-uart.service
 

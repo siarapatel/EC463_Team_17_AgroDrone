@@ -34,26 +34,26 @@ def read_fpid(waypoints_path: str) -> str:
         return json.load(f)["fpid"]
 
 
-MISSION_ID      = str(uuid.uuid4())
-FLIGHT_PLAN_ID  = read_fpid(WAYPOINTS_PATH)
-FLIGHT_PLAN_DIR = os.path.join(SYSTEM_PATH, "flightplans", FLIGHT_PLAN_ID)
-MISSION_PATH    = os.path.join(FLIGHT_PLAN_DIR, MISSION_ID)
+FLIGHT_PLAN_ID  = None
+FLIGHT_PLAN_DIR = None
+MISSION_ID      = None
+MISSION_PATH    = None
 
 WP = 0  # Current waypoint number — set from polled nav data in flight mode
 
-# ---------------------------------------------------------------------------
-# Output directory
-# ---------------------------------------------------------------------------
-try:
+
+def _init_mission_dir():
+    """Create the per-mission output directory on first capture, not at import time."""
+    global FLIGHT_PLAN_ID, FLIGHT_PLAN_DIR, MISSION_ID, MISSION_PATH
+    if MISSION_ID is not None:
+        return
+    FLIGHT_PLAN_ID  = read_fpid(WAYPOINTS_PATH)
+    FLIGHT_PLAN_DIR = os.path.join(SYSTEM_PATH, "flightplans", FLIGHT_PLAN_ID)
+    MISSION_ID      = str(uuid.uuid4())
+    MISSION_PATH    = os.path.join(FLIGHT_PLAN_DIR, MISSION_ID)
     pathlib.Path(FLIGHT_PLAN_DIR).mkdir(parents=True, exist_ok=True)
     os.mkdir(MISSION_PATH)
     print(f"Mission directory '{MISSION_PATH}' created.")
-except FileExistsError:
-    print(f"Directory '{MISSION_PATH}' already exists.")
-except PermissionError:
-    print(f"Permission denied: Unable to create '{MISSION_PATH}'.")
-except Exception as e:
-    print(f"An error occurred: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -199,6 +199,7 @@ def on_capture_press(picam0: Picamera2, picam1: Picamera2):
     """
     if _shutdown_event.is_set():
         return
+    _init_mission_dir()
     if not _capture_lock.acquire(blocking=False):  # drop if already capturing
         return
     try:
@@ -229,6 +230,13 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
     known status. If the waypoint number jumps, we fail loudly instead of
     silently skipping captures.
 
+    Note on "armed": in the event payload, armed=True means the FC nav_state > 4
+    (waypoint mission active), NOT traditional motor arming. The drone can be
+    motor-armed in manual/attitude mode with armed=False here. Capture only runs
+    during planned waypoint missions; RTH and hold modes leave armed=False and
+    do not trigger this service. Receiving armed=False after mission_started
+    (nav mode deactivated) is what triggers offload and clean exit.
+
     Transient disconnects are retried up to _MAX_RECONNECT times. On exhaustion,
     raises _MSPTransientError so systemd can restart this unit without triggering
     the post-mission image offload.
@@ -236,6 +244,9 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
     global WP
 
     signal.signal(signal.SIGTERM, request_shutdown)
+
+    # Persists across reconnects: once a mission is underway, disarm triggers offload.
+    mission_started = False
 
     while not _shutdown_event.is_set():
         # --- Connect with retries ---
@@ -263,6 +274,7 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
 
         # --- Event read loop ---
         buf = b""
+        synced = False  # catch up to hub's current WP on first event; enforce +1 after
         try:
             while not _shutdown_event.is_set():
                 r, _, _ = select.select([sock], [], [], 1.0)
@@ -289,13 +301,36 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
                     if event.get("type") != "mission_status":
                         continue
 
+                    armed = event.get("armed", False)
+
+                    if not armed:
+                        if mission_started:
+                            print("Drone disarmed after mission — initiating offload.")
+                            request_shutdown()
+                        # Pre-arm idle or post-disarm: nothing to do.
+                        continue
+
+                    if not mission_started:
+                        mission_started = True
+                        print("Drone armed — entering capture mode.")
+
                     if event.get("mission_complete"):
-                        print("Mission complete — shutting down.")
-                        request_shutdown()
-                        break
+                        print("All waypoints complete — waiting for disarm to offload.")
+                        continue
 
                     next_wp = int(event.get("waypoint", 0))
-                    if next_wp <= 0 or next_wp == WP:
+                    if next_wp <= 0:
+                        continue
+
+                    if not synced:
+                        # First event after connect: catch up to hub's current state.
+                        # Captures for this waypoint in case we joined a live flight.
+                        WP = next_wp
+                        synced = True
+                        on_capture_press(picam0, picam1)
+                        continue
+
+                    if next_wp == WP:
                         continue
                     if next_wp < WP:
                         raise _MissionSyncError(
@@ -345,9 +380,13 @@ def main():
     print(f"Starting NDVI capture | mode={'TEST' if TEST_MODE else 'FLIGHT'} | "
           f"save_path={MISSION_PATH}")
 
-    picam2_a = Picamera2(0)
-    picam2_b = Picamera2(1)
-    start_cameras(picam2_a, picam2_b)
+    try:
+        picam2_a = Picamera2(0)
+        picam2_b = Picamera2(1)
+        start_cameras(picam2_a, picam2_b)
+    except Exception as e:
+        print(f"[FATAL] Camera initialization failed: {e}")
+        sys.exit(3)
 
     if os.path.exists(CAPTURE_TRIGGER_PATH):
     	os.remove(CAPTURE_TRIGGER_PATH)
@@ -370,10 +409,11 @@ def main():
         print("Keyboard interrupt received.")
     finally:
         stop_cameras(picam2_a, picam2_b)
-        ensure_dir(MISSION_PATH)
-        metadata_path = os.path.join(MISSION_PATH, "metadata.json")
-        with open(metadata_path, "w") as f:
-            f.write(f"Completed flight: {MISSION_ID} with {WP} waypoints.\n")
+        if MISSION_PATH is not None:
+            ensure_dir(MISSION_PATH)
+            metadata_path = os.path.join(MISSION_PATH, "metadata.json")
+            with open(metadata_path, "w") as f:
+                f.write(f"Completed flight: {MISSION_ID} with {WP} waypoints.\n")
         if _offload_on_exit:
             open("/tmp/offload_requested", "w").close()
             print("Offload trigger written to /tmp/offload_requested")

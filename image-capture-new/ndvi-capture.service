@@ -1,12 +1,15 @@
 # /etc/systemd/system/ndvi-capture.service
 #
-# Production unit — runs on boot, restarts on crash, exits cleanly on kill pin or SIGTERM.
+# On-demand capture unit — started exclusively by ndvi-capture.path when
+# agrodrone-msp-uart.service writes /tmp/capture_start.txt on drone arm.
+# Do NOT enable or start this unit directly; it has no [Install] section
+# by design. The path unit is the only correct activation point.
 #
-# Deploy:
+# Deploy (enable the path unit, NOT this service):
 #   sudo cp ndvi-capture.service /etc/systemd/system/
+#   sudo cp ndvi-capture.path /etc/systemd/system/
 #   sudo systemctl daemon-reload
-#   sudo systemctl enable ndvi-capture.service
-#   sudo systemctl start ndvi-capture.service
+#   sudo systemctl enable --now ndvi-capture.path
 #
 # Useful commands:
 #   sudo systemctl status ndvi-capture.service
@@ -27,17 +30,19 @@ WorkingDirectory=/home/sr-design/agrodrone-system
 
 EnvironmentFile=/home/sr-design/EC463_Team_17_AgroDrone/.env
 
+ExecStartPre=/bin/rm -f /tmp/capture_start.txt
 ExecStart=/usr/bin/python3 /home/sr-design/agrodrone-system/ndvi_image_capture.py
 
 # Restart on crash/error but NOT on a clean exit (code 0).
 # A kill-pin or SIGTERM shutdown exits cleanly, so systemd will not restart.
 Restart=on-failure
 RestartSec=5
-RestartPreventExitStatus=2
+RestartPreventExitStatus=2 3
 
 # Journal logging — view with: journalctl -u ndvi-capture.service
 StandardOutput=journal
 StandardError=journal
 
-[Install]
-WantedBy=multi-user.target
+# No [Install] section — this unit has no install target. Activation is
+# exclusively via ndvi-capture.path. Running `systemctl enable ndvi-capture.service`
+# will correctly warn "unit has no install information" and do nothing.

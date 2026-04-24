@@ -39,6 +39,7 @@ EVENTS_SOCKET_PATH   = os.environ.get("MSP_EVENTS_SOCKET_PATH",   "/run/agrodron
 CONTROL_SOCKET_PATH  = os.environ.get("MSP_CONTROL_SOCKET_PATH",  "/run/agrodrone/msp-control.sock")
 WAYPOINTS_PATH       = os.environ.get("WAYPOINTS_PATH",
                                        "/home/sr-design/agrodrone-system/waypoints.json")
+CAPTURE_START_PATH   = os.environ.get("CAPTURE_START_PATH",       "/tmp/capture_start.txt")
 
 # ---------------------------------------------------------------------------
 # MSP V2 constants
@@ -153,10 +154,17 @@ def _mission_status_from_nav(nav: dict) -> dict:
     if nav["nav_activeWpAction"] == WAYPOINT_ACTION and nav["nav_activeWpNumber"] > 0:
         waypoint = nav["nav_activeWpNumber"]
 
-    mission_complete = nav["nav_mode"] == 2 and nav["nav_state"] == 10
+    # "armed" here means the FC is actively executing a waypoint mission (nav_state > 4).
+    # INAV nav_state 0 = idle; 1–4 covers altitude hold, position hold, and RTH — we
+    # intentionally exclude these so the capture pipeline only runs during planned
+    # waypoint missions, not during manual navigation or emergency return.
+    # nav_state 10 specifically = all waypoints complete (see mission_complete below).
+    armed = nav["nav_state"] > 4
+    mission_complete = nav["nav_state"] == 10
     return {
         "type": "mission_status",
         "waypoint": waypoint,
+        "armed": armed,
         "mission_complete": mission_complete,
     }
 
@@ -182,9 +190,9 @@ def _upload_waypoint(ser, index: int, lat: float, lon: float,
         flag,
     )
     ser.write(build_msp_v2(MSP_SET_WP, payload))
-    time.sleep(0.1)
-    if ser.in_waiting:
-        ser.read(ser.in_waiting)
+    result = read_msp_v2_response(ser)
+    if result is None or result[0] != MSP_SET_WP:
+        raise RuntimeError(f"No ACK for WP {index} (got {result})")
     print(f"[msp-uart] Uploaded WP {index}: {lat}, {lon}")
 
 
@@ -219,8 +227,10 @@ def run_upload(ser) -> tuple:
 
         # Save to EEPROM
         ser.write(build_msp_v2(MSP_SAVE_NVRAM, b""))
+        result = read_msp_v2_response(ser)
+        if result is None or result[0] != MSP_SAVE_NVRAM:
+            raise RuntimeError(f"No ACK for SAVE_NVRAM (got {result})")
         print("[msp-uart] Mission saved to NVRAM")
-        time.sleep(0.5)
 
     except Exception as e:
         return False, f"Upload error: {e}"
@@ -283,6 +293,8 @@ def serial_loop(shutdown: threading.Event) -> None:
 
     print("[msp-uart] Serial port open — starting poll loop")
 
+    prev_armed = False
+
     try:
         while not shutdown.is_set():
             # Check for pending upload requests first
@@ -305,7 +317,16 @@ def serial_loop(shutdown: threading.Event) -> None:
                     os.write("/tmp/capture_start.txt")
                     nav = _parse_nav_status(payload)
                     if nav:
-                        _broadcast_status(_mission_status_from_nav(nav))
+                        status = _mission_status_from_nav(nav)
+                        armed = status["armed"]
+                        if armed and not prev_armed:
+                            try:
+                                open(CAPTURE_START_PATH, "w").close()
+                                print(f"[msp-uart] Drone armed — wrote {CAPTURE_START_PATH}")
+                            except OSError as e:
+                                print(f"[msp-uart] Warning: could not write capture trigger: {e}")
+                        prev_armed = armed
+                        _broadcast_status(status)
             else:
                 if ser.in_waiting:
                     ser.read(ser.in_waiting)
