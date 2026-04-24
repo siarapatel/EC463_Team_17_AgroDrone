@@ -230,6 +230,13 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
     known status. If the waypoint number jumps, we fail loudly instead of
     silently skipping captures.
 
+    Note on "armed": in the event payload, armed=True means the FC nav_state > 4
+    (waypoint mission active), NOT traditional motor arming. The drone can be
+    motor-armed in manual/attitude mode with armed=False here. Capture only runs
+    during planned waypoint missions; RTH and hold modes leave armed=False and
+    do not trigger this service. Receiving armed=False after mission_started
+    (nav mode deactivated) is what triggers offload and clean exit.
+
     Transient disconnects are retried up to _MAX_RECONNECT times. On exhaustion,
     raises _MSPTransientError so systemd can restart this unit without triggering
     the post-mission image offload.

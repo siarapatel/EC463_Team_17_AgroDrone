@@ -113,42 +113,58 @@ def nav_payload(nav_mode: int, nav_state: int, wp_num: int, wp_action: int) -> b
 
 
 def build_sequence(name: str, custom_waypoints: list[int]) -> list[bytes]:
+    # nav_state=0  → armed=False (pre-arm idle or post-disarm)
+    # nav_state=6  → armed=True  (NAV_STATE_AUTO_WP: actively navigating)
+    # nav_state=10 → armed=True  (mission complete, still flying / RTH)
+    # Sequences must start disarmed and end with a disarm state so the
+    # capture service sees the nav_state 0→>0 arm transition and the
+    # >0→0 disarm transition that triggers image offload.
+
     if name == "nominal":
         return [
-            nav_payload(0, 0, 0, 0),
-            nav_payload(0, 0, 1, WAYPOINT_ACTION),
-            nav_payload(0, 0, 2, WAYPOINT_ACTION),
-            nav_payload(0, 0, 3, WAYPOINT_ACTION),
-            nav_payload(2, 10, 3, WAYPOINT_ACTION),
+            nav_payload(0, 0, 0, 0),               # disarmed (pre-arm)
+            nav_payload(2, 6, 1, WAYPOINT_ACTION),  # armed, WP 1
+            nav_payload(2, 6, 2, WAYPOINT_ACTION),  # armed, WP 2
+            nav_payload(2, 6, 3, WAYPOINT_ACTION),  # armed, WP 3
+            nav_payload(2, 10, 3, WAYPOINT_ACTION), # mission complete (still armed)
+            nav_payload(0, 0, 0, 0),               # disarmed → triggers offload
         ]
 
     if name == "duplicate":
         return [
-            nav_payload(0, 0, 1, WAYPOINT_ACTION),
-            nav_payload(0, 0, 1, WAYPOINT_ACTION),
-            nav_payload(0, 0, 2, WAYPOINT_ACTION),
-            nav_payload(2, 10, 2, WAYPOINT_ACTION),
+            nav_payload(0, 0, 0, 0),               # disarmed (pre-arm)
+            nav_payload(2, 6, 1, WAYPOINT_ACTION),  # armed, WP 1
+            nav_payload(2, 6, 1, WAYPOINT_ACTION),  # duplicate WP 1 (no capture)
+            nav_payload(2, 6, 2, WAYPOINT_ACTION),  # armed, WP 2
+            nav_payload(2, 10, 2, WAYPOINT_ACTION), # mission complete
+            nav_payload(0, 0, 0, 0),               # disarmed → triggers offload
         ]
 
     if name == "skip":
         return [
-            nav_payload(0, 0, 1, WAYPOINT_ACTION),
-            nav_payload(0, 0, 3, WAYPOINT_ACTION),
-            nav_payload(2, 10, 3, WAYPOINT_ACTION),
+            nav_payload(0, 0, 0, 0),               # disarmed (pre-arm)
+            nav_payload(2, 6, 1, WAYPOINT_ACTION),  # armed, WP 1
+            nav_payload(2, 6, 3, WAYPOINT_ACTION),  # WP 3 — skipped WP 2, expect _MissionSyncError
+            nav_payload(2, 10, 3, WAYPOINT_ACTION), # mission complete
+            nav_payload(0, 0, 0, 0),               # disarmed
         ]
 
     if name == "backward":
         return [
-            nav_payload(0, 0, 1, WAYPOINT_ACTION),
-            nav_payload(0, 0, 2, WAYPOINT_ACTION),
-            nav_payload(0, 0, 1, WAYPOINT_ACTION),
-            nav_payload(2, 10, 1, WAYPOINT_ACTION),
+            nav_payload(0, 0, 0, 0),               # disarmed (pre-arm)
+            nav_payload(2, 6, 1, WAYPOINT_ACTION),  # armed, WP 1
+            nav_payload(2, 6, 2, WAYPOINT_ACTION),  # WP 2
+            nav_payload(2, 6, 1, WAYPOINT_ACTION),  # WP 1 — backward, expect _MissionSyncError
+            nav_payload(2, 10, 1, WAYPOINT_ACTION), # mission complete
+            nav_payload(0, 0, 0, 0),               # disarmed
         ]
 
     if name == "custom":
-        sequence = [nav_payload(0, 0, wp, WAYPOINT_ACTION) for wp in custom_waypoints]
+        sequence = [nav_payload(0, 0, 0, 0)]
+        sequence += [nav_payload(2, 6, wp, WAYPOINT_ACTION) for wp in custom_waypoints]
         if custom_waypoints:
             sequence.append(nav_payload(2, 10, custom_waypoints[-1], WAYPOINT_ACTION))
+        sequence.append(nav_payload(0, 0, 0, 0))
         return sequence
 
     raise ValueError(f"Unknown scenario: {name}")
