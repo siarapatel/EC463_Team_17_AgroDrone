@@ -190,9 +190,9 @@ def _upload_waypoint(ser, index: int, lat: float, lon: float,
         flag,
     )
     ser.write(build_msp_v2(MSP_SET_WP, payload))
-    time.sleep(0.1)
-    if ser.in_waiting:
-        ser.read(ser.in_waiting)
+    result = read_msp_v2_response(ser)
+    if result is None or result[0] != MSP_SET_WP:
+        raise RuntimeError(f"No ACK for WP {index} (got {result})")
     print(f"[msp-uart] Uploaded WP {index}: {lat}, {lon}")
 
 
@@ -227,8 +227,10 @@ def run_upload(ser) -> tuple:
 
         # Save to EEPROM
         ser.write(build_msp_v2(MSP_SAVE_NVRAM, b""))
+        result = read_msp_v2_response(ser)
+        if result is None or result[0] != MSP_SAVE_NVRAM:
+            raise RuntimeError(f"No ACK for SAVE_NVRAM (got {result})")
         print("[msp-uart] Mission saved to NVRAM")
-        time.sleep(0.5)
 
     except Exception as e:
         return False, f"Upload error: {e}"
