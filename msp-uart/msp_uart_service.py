@@ -305,8 +305,9 @@ def serial_loop(shutdown: threading.Event) -> None:
                 if function == MSP_NAV_STATUS:
                     nav = _parse_nav_status(payload)
                     if nav:
-                        _broadcast_status(_mission_status_from_nav(nav))
-                        if not capture_triggered:
+                        status = _mission_status_from_nav(nav)
+                        _broadcast_status(status)
+                        if not capture_triggered and status["waypoint"] > 0:
                             with open("/tmp/capture_start.txt", "w") as f:
                                 f.write("")
                             capture_triggered = True

@@ -40,4 +40,4 @@ StandardOutput=journal
 StandardError=journal
 
 [Install]
-WantedBy=multi-user.target
+# Activated by ndvi-capture.path — do not enable this unit directly
