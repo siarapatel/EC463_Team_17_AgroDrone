@@ -9,7 +9,9 @@ import sys
 import threading
 import time
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Optional
 
 # ---------------------------------------------------------------------------
 # Configuration via environment variables
@@ -25,42 +27,54 @@ TEST_COUNT  = int(os.environ.get("NDVI_TEST_COUNT", "3"))
 SYSTEM_PATH = os.environ.get("SYSTEM_PATH", "/home/sr-design/agrodrone-system")
 MSP_EVENTS_SOCKET_PATH = os.environ.get("MSP_EVENTS_SOCKET_PATH", "/run/agrodrone/msp-events.sock")
 
-WAYPOINTS_PATH  = os.path.join(SYSTEM_PATH, "waypoints.json")
+WAYPOINTS_PATH = os.path.join(SYSTEM_PATH, "waypoints.json")
 
 
 def read_fpid(waypoints_path: str) -> str:
-    """Read the flight plan ID from waypoints.json."""
     with open(waypoints_path, "r") as f:
         return json.load(f)["fpid"]
 
 
-MISSION_ID      = str(uuid.uuid4())
-FLIGHT_PLAN_ID  = read_fpid(WAYPOINTS_PATH)
-FLIGHT_PLAN_DIR = os.path.join(SYSTEM_PATH, "flightplans", FLIGHT_PLAN_ID)
-MISSION_PATH    = os.path.join(FLIGHT_PLAN_DIR, MISSION_ID)
-
-WP = 0  # Current waypoint number — set from polled nav data in flight mode
-
 # ---------------------------------------------------------------------------
-# Output directory
+# Runtime mission context — unset until the first waypoint is accepted.
+# MISSION_ID and FLIGHT_PLAN_ID are minted here, not at module load, so that
+# a new UUID is generated for every mission even when waypoints.json is reused.
 # ---------------------------------------------------------------------------
-try:
-    pathlib.Path(FLIGHT_PLAN_DIR).mkdir(parents=True, exist_ok=True)
-    os.mkdir(MISSION_PATH)
-    print(f"Mission directory '{MISSION_PATH}' created.")
-except FileExistsError:
-    print(f"Directory '{MISSION_PATH}' already exists.")
-except PermissionError:
-    print(f"Permission denied: Unable to create '{MISSION_PATH}'.")
-except Exception as e:
-    print(f"An error occurred: {e}")
+
+@dataclass
+class MissionContext:
+    mission_id:      str
+    flight_plan_id:  str
+    flight_plan_dir: str
+    mission_path:    str
+
+
+_mission_ctx: Optional[MissionContext] = None
+WP = 0  # Current waypoint number — updated at runtime
+
+
+def initialize_mission_context() -> MissionContext:
+    global _mission_ctx
+    flight_plan_id  = read_fpid(WAYPOINTS_PATH)
+    mission_id      = str(uuid.uuid4())
+    flight_plan_dir = os.path.join(SYSTEM_PATH, "flightplans", flight_plan_id)
+    mission_path    = os.path.join(flight_plan_dir, mission_id)
+    pathlib.Path(mission_path).mkdir(parents=True, exist_ok=True)
+    print(f"[ndvi] Mission initialized | id={mission_id} | path={mission_path}")
+    _mission_ctx = MissionContext(
+        mission_id=mission_id,
+        flight_plan_id=flight_plan_id,
+        flight_plan_dir=flight_plan_dir,
+        mission_path=mission_path,
+    )
+    return _mission_ctx
 
 
 # ---------------------------------------------------------------------------
 # Shared shutdown state
 # ---------------------------------------------------------------------------
 _shutdown_event  = threading.Event()
-_offload_on_exit = False   # True only on clean mission shutdown (SIGTERM / nav state)
+_offload_on_exit = False
 
 
 class _MSPTransientError(Exception):
@@ -72,7 +86,6 @@ class _MissionSyncError(Exception):
 
 
 def request_shutdown(signum=None, frame=None):
-    """Signal handler / nav-state callback: request a clean exit and queue offload."""
     global _offload_on_exit
     print("Shutdown requested.")
     _offload_on_exit = True
@@ -84,12 +97,10 @@ def request_shutdown(signum=None, frame=None):
 # ---------------------------------------------------------------------------
 
 def ensure_dir(path: str):
-    """Create directory if it doesn't exist."""
     pathlib.Path(path).mkdir(parents=True, exist_ok=True)
 
 
 def make_still_config(picam: Picamera2):
-    """Apply still-capture configuration to a camera."""
     config = picam.create_still_configuration({"size": (800, 600), "format": "RGB888"})
     picam.configure(config)
     picam.options['quality'] = 90
@@ -108,7 +119,6 @@ def lock_exposure(picam: Picamera2) -> dict:
 
 
 def start_cameras(picam0: Picamera2, picam1: Picamera2):
-    """Configure and start both cameras with locked exposure."""
     make_still_config(picam0)
     picam0.start()
     lock_exposure(picam0)
@@ -119,17 +129,13 @@ def start_cameras(picam0: Picamera2, picam1: Picamera2):
 
 
 def stop_cameras(picam0: Picamera2, picam1: Picamera2):
-    """Stop both cameras cleanly."""
     picam0.stop()
     picam1.stop()
     print("Cameras stopped.")
 
 
 def sequential_reconfig(picam0: Picamera2, picam1: Picamera2):
-    """
-    Re-lock exposure on both cameras without restarting them.
-    Sleeps briefly so controls settle before the next capture.
-    """
+    """Re-lock exposure on both cameras without restarting them."""
     for picam in (picam0, picam1):
         lock_exposure(picam)
     time.sleep(0.3)  # ~10 frames @ 30 fps
@@ -145,7 +151,6 @@ def capture_from_camera(
     timestamp: str,
     outdir: str,
 ) -> dict:
-    """Capture a JPEG from a single camera. Returns capture metadata dict."""
     image_path = os.path.join(outdir, f"{timestamp}_cam{cam_num}.jpg")
     picam.capture_file(image_path)
 
@@ -164,21 +169,18 @@ def capture_from_camera(
 
 
 def sequential_capture(picam0: Picamera2, picam1: Picamera2) -> dict:
-    """
-    Capture one image from each camera and write a metadata JSON.
-    Returns the metadata dict.
-    """
+    """Capture one image from each camera and write a per-capture metadata JSON."""
+    ctx = _mission_ctx
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
-    ensure_dir(MISSION_PATH)
 
     metadata_dict = {
         "capture_timestamp": timestamp,
         "waypoint": WP,
-        "camera_0": capture_from_camera(picam0, 0, timestamp, MISSION_PATH),
-        "camera_1": capture_from_camera(picam1, 1, timestamp, MISSION_PATH),
+        "camera_0": capture_from_camera(picam0, 0, timestamp, ctx.mission_path),
+        "camera_1": capture_from_camera(picam1, 1, timestamp, ctx.mission_path),
     }
 
-    metadata_path = os.path.join(MISSION_PATH, f"{timestamp}_metadata.json")
+    metadata_path = os.path.join(ctx.mission_path, f"{timestamp}_metadata.json")
     with open(metadata_path, "w") as f:
         json.dump(metadata_dict, f, indent=2, default=str)
 
@@ -192,14 +194,15 @@ def sequential_capture(picam0: Picamera2, picam1: Picamera2) -> dict:
 
 _capture_lock = threading.Lock()
 
+
 def on_capture_press(picam0: Picamera2, picam1: Picamera2):
     """
     Trigger a dual-camera capture. Non-blocking: drops the call if a capture
-    is already in progress. WP must be set by the caller before invoking this.
+    is already in progress. _mission_ctx and WP must be set by the caller.
     """
     if _shutdown_event.is_set():
         return
-    if not _capture_lock.acquire(blocking=False):  # drop if already capturing
+    if not _capture_lock.acquire(blocking=False):
         return
     try:
         sequential_capture(picam0, picam1)
@@ -214,31 +217,26 @@ def on_capture_press(picam0: Picamera2, picam1: Picamera2):
 # ---------------------------------------------------------------------------
 
 _MAX_RECONNECT   = 5
-_RECONNECT_DELAY = 3.0  # seconds between reconnect attempts
+_RECONNECT_DELAY = 3.0
 
 
 def run_flight(picam0: Picamera2, picam1: Picamera2):
     """
     Production flight mode.
-    Connects to the MSP events socket and consumes mission status snapshots:
-      mission_status.waypoint          → capture exactly once per waypoint
-      mission_status.mission_complete  → begin clean shutdown
 
-    The hub publishes state snapshots rather than edge-triggered events. That
-    keeps reconnect behavior simple: on reconnect we resume from the latest
-    known status. If the waypoint number jumps, we fail loudly instead of
-    silently skipping captures.
+    Stays idle until the first nonzero waypoint event. Mission context is
+    initialized exactly once — on waypoint 1. If the process restarts
+    mid-mission and the first nonzero waypoint seen is >1, raises
+    _MissionSyncError (exit 2, not restarted) as the fail-stop policy.
 
-    Transient disconnects are retried up to _MAX_RECONNECT times. On exhaustion,
-    raises _MSPTransientError so systemd can restart this unit without triggering
-    the post-mission image offload.
+    Replayed mission_complete=True snapshots from the hub are ignored while
+    idle to prevent a Restart=always restart loop after clean mission exit.
     """
     global WP
 
     signal.signal(signal.SIGTERM, request_shutdown)
 
     while not _shutdown_event.is_set():
-        # --- Connect with retries ---
         sock = None
         for attempt in range(1, _MAX_RECONNECT + 1):
             if _shutdown_event.is_set():
@@ -261,7 +259,6 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
 
         print(f"Connected to MSP events socket at {MSP_EVENTS_SOCKET_PATH}")
 
-        # --- Event read loop ---
         buf = b""
         try:
             while not _shutdown_event.is_set():
@@ -290,24 +287,40 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
                         continue
 
                     if event.get("mission_complete"):
+                        if _mission_ctx is None:
+                            # Replayed terminal snapshot — ignore while idle
+                            continue
                         print("Mission complete — shutting down.")
                         request_shutdown()
                         break
 
                     next_wp = int(event.get("waypoint", 0))
-                    if next_wp <= 0 or next_wp == WP:
+                    if next_wp <= 0:
                         continue
-                    if next_wp < WP:
-                        raise _MissionSyncError(
-                            f"Waypoint went backward: local={WP}, hub={next_wp}"
-                        )
-                    if next_wp > WP + 1:
-                        raise _MissionSyncError(
-                            f"Missed waypoint transition: local={WP}, hub={next_wp}"
-                        )
 
-                    WP = next_wp
-                    on_capture_press(picam0, picam1)
+                    if _mission_ctx is None:
+                        # Idle: mission may only start on waypoint 1
+                        if next_wp > 1:
+                            raise _MissionSyncError(
+                                f"Mid-mission restart: first waypoint is {next_wp}, expected 1"
+                            )
+                        initialize_mission_context()
+                        WP = next_wp
+                        on_capture_press(picam0, picam1)
+                    else:
+                        # Mission active: strict sequential sync
+                        if next_wp == WP:
+                            continue
+                        if next_wp < WP:
+                            raise _MissionSyncError(
+                                f"Waypoint went backward: local={WP}, hub={next_wp}"
+                            )
+                        if next_wp > WP + 1:
+                            raise _MissionSyncError(
+                                f"Missed waypoint transition: local={WP}, hub={next_wp}"
+                            )
+                        WP = next_wp
+                        on_capture_press(picam0, picam1)
 
         finally:
             sock.close()
@@ -316,12 +329,10 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
 
 
 def run_test(picam0: Picamera2, picam1: Picamera2):
-    """
-    Test mode: fire NDVI_TEST_COUNT capture cycles with a short delay.
-    No socket or hardware required.
-    """
+    """Test mode: fire TEST_COUNT capture cycles with a short delay."""
     global WP
-    print(f"TEST MODE: running {TEST_COUNT} capture cycle(s) into {MISSION_PATH}")
+    initialize_mission_context()
+    print(f"TEST MODE: running {TEST_COUNT} capture cycle(s) into {_mission_ctx.mission_path}")
     for _ in range(TEST_COUNT):
         if _shutdown_event.is_set():
             print("Shutdown during test — stopping early.")
@@ -342,22 +353,21 @@ def run_test(picam0: Picamera2, picam1: Picamera2):
 def main():
     global _offload_on_exit
 
-    print(f"Starting NDVI capture | mode={'TEST' if TEST_MODE else 'FLIGHT'} | "
-          f"save_path={MISSION_PATH}")
+    print(f"[ndvi] Starting | mode={'TEST' if TEST_MODE else 'FLIGHT'}")
 
     picam2_a = Picamera2(0)
     picam2_b = Picamera2(1)
     start_cameras(picam2_a, picam2_b)
+    print("[ndvi] Cameras ready — waiting for mission events")
 
     exit_status = 0
     try:
         if TEST_MODE:
             run_test(picam2_a, picam2_b)
-            _offload_on_exit = True  # test runs always offload
+            _offload_on_exit = True
         else:
             run_flight(picam2_a, picam2_b)
     except _MSPTransientError as e:
-        # MSP service unreachable — let systemd restart us; do NOT trigger offload
         print(f"[TRANSIENT ERROR] {e}")
         exit_status = 1
     except _MissionSyncError as e:
@@ -367,16 +377,19 @@ def main():
         print("Keyboard interrupt received.")
     finally:
         stop_cameras(picam2_a, picam2_b)
-        ensure_dir(MISSION_PATH)
-        metadata_path = os.path.join(MISSION_PATH, "metadata.json")
-        with open(metadata_path, "w") as f:
-            f.write(f"Completed flight: {MISSION_ID} with {WP} waypoints.\n")
-        if _offload_on_exit:
-            open("/tmp/offload_requested", "w").close()
-            print("Offload trigger written to /tmp/offload_requested")
+        if _mission_ctx is not None:
+            metadata_path = os.path.join(_mission_ctx.mission_path, "metadata.json")
+            with open(metadata_path, "w") as f:
+                f.write(f"Completed flight: {_mission_ctx.mission_id} with {WP} waypoints.\n")
+            if _offload_on_exit:
+                open("/tmp/offload_requested", "w").close()
+                print("Offload trigger written to /tmp/offload_requested")
+        elif _offload_on_exit:
+            print("[ndvi] Shutdown with no mission active — offload skipped.")
 
     if exit_status:
         sys.exit(exit_status)
+
 
 if __name__ == "__main__":
     main()

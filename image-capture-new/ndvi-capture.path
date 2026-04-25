@@ -1,24 +1,7 @@
-# /etc/systemd/system/ndvi-capture.path
+# RETIRED — do not deploy
 #
-# Watches for the mission-start trigger file written by msp_uart_service.py
-# when the first waypoint (wp > 0) is reached. Activates ndvi-capture.service
-# exactly once per boot.
+# This path unit was part of a first-waypoint activation design that has been
+# superseded. ndvi-capture.service now starts at boot directly and handles
+# idle/active state internally. This file is kept for history only.
 #
-# Deploy:
-#   sudo cp ndvi-capture.path    /etc/systemd/system/
-#   sudo cp ndvi-capture.service /etc/systemd/system/
-#   sudo systemctl daemon-reload
-#   sudo systemctl disable ndvi-capture.service   # remove old boot activation
-#   sudo systemctl enable  ndvi-capture.path
-#   sudo systemctl start   ndvi-capture.path
-
-[Unit]
-Description=Activate NDVI capture when mission waypoint reached
-After=agrodrone-msp-uart.service
-
-[Path]
-PathExists=/tmp/capture_start.txt
-Unit=ndvi-capture.service
-
-[Install]
-WantedBy=multi-user.target
+# See ndvi-capture.service for the current deployment model.
