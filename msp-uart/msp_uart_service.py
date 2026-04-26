@@ -244,8 +244,13 @@ _command_queue: queue.Queue = queue.Queue()
 
 _event_subscribers: list = []
 _event_subscribers_lock = threading.Lock()
-_last_status: Optional[dict] = None
-_last_status_lock = threading.Lock()
+_last_emitted_status: Optional[dict] = None
+_replay_status: dict = {
+    "type": "mission_status",
+    "waypoint": 0,
+    "mission_complete": False,
+}
+_status_lock = threading.Lock()
 
 
 def _format_status(status: dict) -> str:
@@ -255,15 +260,20 @@ def _format_status(status: dict) -> str:
     )
 
 
-def _broadcast_status(status: dict) -> None:
+def _is_terminal_complete(status: dict) -> bool:
+    return bool(status.get("mission_complete"))
+
+
+def _is_neutral_idle(status: dict) -> bool:
+    return (
+        status.get("type") == "mission_status"
+        and int(status.get("waypoint", 0)) == 0
+        and not bool(status.get("mission_complete"))
+    )
+
+
+def _send_status_to_subscribers(status: dict) -> None:
     """Send one mission status JSON line to all subscribers; drop dead connections."""
-    global _last_status
-
-    with _last_status_lock:
-        if status == _last_status:
-            return
-        _last_status = status
-
     line = (json.dumps(status) + "\n").encode()
     with _event_subscribers_lock:
         subscriber_count = len(_event_subscribers)
@@ -285,11 +295,45 @@ def _broadcast_status(status: dict) -> None:
         _event_subscribers[:] = alive
 
 
-def _send_replayed_status(conn: socket.socket, status: dict) -> None:
-    """Send the current cached mission status to one newly connected client."""
-    replay_status = dict(status)
-    replay_status["replayed"] = True
-    conn.sendall((json.dumps(replay_status) + "\n").encode())
+def _handle_status_update(status: dict) -> None:
+    """
+    Maintain separate live and replay state.
+
+    - `_last_emitted_status` deduplicates live broadcasts to current subscribers.
+    - `_replay_status` is what newly connected subscribers receive.
+    """
+    global _last_emitted_status, _replay_status
+
+    with _status_lock:
+        if status == _last_emitted_status:
+            return
+
+        suppress_live_broadcast = (
+            _is_neutral_idle(status)
+            and _last_emitted_status is not None
+            and _is_terminal_complete(_last_emitted_status)
+        )
+
+        _last_emitted_status = dict(status)
+        if _is_terminal_complete(status):
+            _replay_status = {
+                "type": "mission_status",
+                "waypoint": 0,
+                "mission_complete": False,
+            }
+        else:
+            _replay_status = dict(status)
+
+    if suppress_live_broadcast:
+        print("[msp-uart] Suppressing live neutral reset after terminal completion")
+        return
+
+    _send_status_to_subscribers(status)
+
+
+def _send_replay_status(conn: socket.socket, status: dict) -> None:
+    """Send the current replay snapshot to one newly connected client."""
+    conn.sendall((json.dumps(status) + "\n").encode())
 
 # ---------------------------------------------------------------------------
 # Serial loop (the ONLY code path that ever touches the serial port)
@@ -324,7 +368,7 @@ def serial_loop(shutdown: threading.Event) -> None:
                 if function == MSP_NAV_STATUS:
                     nav = _parse_nav_status(payload)
                     if nav:
-                        _broadcast_status(_mission_status_from_nav(nav))
+                        _handle_status_update(_mission_status_from_nav(nav))
             else:
                 if ser.in_waiting:
                     ser.read(ser.in_waiting)
@@ -367,19 +411,18 @@ def events_socket_server(shutdown: threading.Event) -> None:
         with _event_subscribers_lock:
             _event_subscribers.append(conn)
 
-        # Replay latest snapshot so reconnecting clients resume immediately
-        with _last_status_lock:
-            last = _last_status
-        if last is not None:
-            try:
-                _send_replayed_status(conn, last)
-            except OSError:
-                with _event_subscribers_lock:
-                    try:
-                        _event_subscribers.remove(conn)
-                    except ValueError:
-                        pass
-                conn.close()
+        # Replay the subscriber-safe snapshot on every new connection.
+        with _status_lock:
+            replay_status = dict(_replay_status)
+        try:
+            _send_replay_status(conn, replay_status)
+        except OSError:
+            with _event_subscribers_lock:
+                try:
+                    _event_subscribers.remove(conn)
+                except ValueError:
+                    pass
+            conn.close()
 
         print(f"[msp-uart] Event subscriber connected: {addr}")
 
