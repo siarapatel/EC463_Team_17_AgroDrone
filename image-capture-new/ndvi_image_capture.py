@@ -302,8 +302,13 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
                     log_state(
                         "Event received | "
                         f"waypoint={event.get('waypoint', 0)} "
-                        f"mission_complete={event.get('mission_complete', False)}"
+                        f"mission_complete={event.get('mission_complete', False)} "
+                        f"replayed={event.get('replayed', False)}"
                     )
+
+                    if event.get("replayed") and _mission_ctx is None:
+                        log_state("Replay snapshot ignored while idle")
+                        continue
 
                     if event.get("mission_complete"):
                         if _mission_ctx is None:

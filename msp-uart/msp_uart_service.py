@@ -284,6 +284,13 @@ def _broadcast_status(status: dict) -> None:
                     pass
         _event_subscribers[:] = alive
 
+
+def _send_replayed_status(conn: socket.socket, status: dict) -> None:
+    """Send the current cached mission status to one newly connected client."""
+    replay_status = dict(status)
+    replay_status["replayed"] = True
+    conn.sendall((json.dumps(replay_status) + "\n").encode())
+
 # ---------------------------------------------------------------------------
 # Serial loop (the ONLY code path that ever touches the serial port)
 # ---------------------------------------------------------------------------
@@ -365,7 +372,7 @@ def events_socket_server(shutdown: threading.Event) -> None:
             last = _last_status
         if last is not None:
             try:
-                conn.sendall((json.dumps(last) + "\n").encode())
+                _send_replayed_status(conn, last)
             except OSError:
                 with _event_subscribers_lock:
                     try:
