@@ -30,6 +30,10 @@ MSP_EVENTS_SOCKET_PATH = os.environ.get("MSP_EVENTS_SOCKET_PATH", "/run/agrodron
 WAYPOINTS_PATH = os.path.join(SYSTEM_PATH, "waypoints.json")
 
 
+def log_state(message: str) -> None:
+    print(f"[ndvi] {message}")
+
+
 def read_fpid(waypoints_path: str) -> str:
     with open(waypoints_path, "r") as f:
         return json.load(f)["fpid"]
@@ -60,7 +64,10 @@ def initialize_mission_context() -> MissionContext:
     flight_plan_dir = os.path.join(SYSTEM_PATH, "flightplans", flight_plan_id)
     mission_path    = os.path.join(flight_plan_dir, mission_id)
     pathlib.Path(mission_path).mkdir(parents=True, exist_ok=True)
-    print(f"[ndvi] Mission initialized | id={mission_id} | path={mission_path}")
+    log_state(
+        f"Mission initialized | fpid={flight_plan_id} id={mission_id} "
+        f"path={mission_path}"
+    )
     _mission_ctx = MissionContext(
         mission_id=mission_id,
         flight_plan_id=flight_plan_id,
@@ -131,7 +138,7 @@ def start_cameras(picam0: Picamera2, picam1: Picamera2):
 def stop_cameras(picam0: Picamera2, picam1: Picamera2):
     picam0.stop()
     picam1.stop()
-    print("Cameras stopped.")
+    log_state("Cameras stopped")
 
 
 def sequential_reconfig(picam0: Picamera2, picam1: Picamera2):
@@ -184,7 +191,7 @@ def sequential_capture(picam0: Picamera2, picam1: Picamera2) -> dict:
     with open(metadata_path, "w") as f:
         json.dump(metadata_dict, f, indent=2, default=str)
 
-    print(f"[WP {WP}] Captured at {timestamp}")
+    log_state(f"Capture complete | waypoint={WP} timestamp={timestamp}")
     return metadata_dict
 
 
@@ -201,12 +208,16 @@ def on_capture_press(picam0: Picamera2, picam1: Picamera2):
     is already in progress. _mission_ctx and WP must be set by the caller.
     """
     if _shutdown_event.is_set():
+        log_state(f"Capture skipped | waypoint={WP} reason=shutdown_in_progress")
         return
     if not _capture_lock.acquire(blocking=False):
+        log_state(f"Capture skipped | waypoint={WP} reason=capture_already_running")
         return
     try:
+        log_state(f"Capture start | waypoint={WP}")
         sequential_capture(picam0, picam1)
         if WP % 5 == 0:
+            log_state(f"Exposure relock | waypoint={WP}")
             sequential_reconfig(picam0, picam1)
     finally:
         _capture_lock.release()
@@ -247,8 +258,10 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
                 sock = s
                 break
             except (FileNotFoundError, ConnectionRefusedError) as e:
-                print(f"Cannot connect to MSP events socket "
-                      f"(attempt {attempt}/{_MAX_RECONNECT}): {e}")
+                log_state(
+                    f"Cannot connect to MSP events socket "
+                    f"(attempt {attempt}/{_MAX_RECONNECT}): {e}"
+                )
                 time.sleep(_RECONNECT_DELAY)
 
         if sock is None:
@@ -257,7 +270,7 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
                 f"after {_MAX_RECONNECT} attempts"
             )
 
-        print(f"Connected to MSP events socket at {MSP_EVENTS_SOCKET_PATH}")
+        log_state(f"Connected to MSP events socket at {MSP_EVENTS_SOCKET_PATH}")
 
         buf = b""
         try:
@@ -269,10 +282,10 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
                 try:
                     chunk = sock.recv(4096)
                 except OSError as e:
-                    print(f"Socket error: {e} — will retry connection.")
+                    log_state(f"Socket error: {e} — will retry connection")
                     break
                 if not chunk:
-                    print("MSP events socket closed — will retry.")
+                    log_state("MSP events socket closed — will retry")
                     break
 
                 buf += chunk
@@ -286,16 +299,24 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
                     if event.get("type") != "mission_status":
                         continue
 
+                    log_state(
+                        "Event received | "
+                        f"waypoint={event.get('waypoint', 0)} "
+                        f"mission_complete={event.get('mission_complete', False)}"
+                    )
+
                     if event.get("mission_complete"):
                         if _mission_ctx is None:
                             # Replayed terminal snapshot — ignore while idle
+                            log_state("Mission-complete replay ignored while idle")
                             continue
-                        print("Mission complete — shutting down.")
+                        log_state("Mission complete received — shutting down")
                         request_shutdown()
                         break
 
                     next_wp = int(event.get("waypoint", 0))
                     if next_wp <= 0:
+                        log_state(f"Waypoint ignored | waypoint={next_wp} reason=non_positive")
                         continue
 
                     if _mission_ctx is None:
@@ -304,12 +325,15 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
                             raise _MissionSyncError(
                                 f"Mid-mission restart: first waypoint is {next_wp}, expected 1"
                             )
+                        log_state("First active waypoint received — initializing mission context")
                         initialize_mission_context()
                         WP = next_wp
+                        log_state(f"Waypoint accepted | local={WP} reason=mission_start")
                         on_capture_press(picam0, picam1)
                     else:
                         # Mission active: strict sequential sync
                         if next_wp == WP:
+                            log_state(f"Waypoint ignored | waypoint={next_wp} reason=duplicate")
                             continue
                         if next_wp < WP:
                             raise _MissionSyncError(
@@ -319,31 +343,33 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
                             raise _MissionSyncError(
                                 f"Missed waypoint transition: local={WP}, hub={next_wp}"
                             )
+                        previous_wp = WP
                         WP = next_wp
+                        log_state(f"Waypoint accepted | local={previous_wp} next={WP}")
                         on_capture_press(picam0, picam1)
 
         finally:
             sock.close()
 
-    print("Exiting flight loop.")
+    log_state("Exiting flight loop")
 
 
 def run_test(picam0: Picamera2, picam1: Picamera2):
     """Test mode: fire TEST_COUNT capture cycles with a short delay."""
     global WP
     initialize_mission_context()
-    print(f"TEST MODE: running {TEST_COUNT} capture cycle(s) into {_mission_ctx.mission_path}")
+    log_state(f"TEST MODE: running {TEST_COUNT} capture cycle(s) into {_mission_ctx.mission_path}")
     for _ in range(TEST_COUNT):
         if _shutdown_event.is_set():
-            print("Shutdown during test — stopping early.")
+            log_state("Shutdown during test — stopping early")
             break
         sequential_capture(picam0, picam1)
         if WP % 5 == 0:
-            print(f"[WP {WP}] Re-locking exposure...")
+            log_state(f"Exposure relock | waypoint={WP}")
             sequential_reconfig(picam0, picam1)
         WP += 1
         time.sleep(0.5)
-    print("Test complete.")
+    log_state("Test complete")
 
 
 # ---------------------------------------------------------------------------
@@ -353,12 +379,12 @@ def run_test(picam0: Picamera2, picam1: Picamera2):
 def main():
     global _offload_on_exit
 
-    print(f"[ndvi] Starting | mode={'TEST' if TEST_MODE else 'FLIGHT'}")
+    log_state(f"Starting | mode={'TEST' if TEST_MODE else 'FLIGHT'}")
 
     picam2_a = Picamera2(0)
     picam2_b = Picamera2(1)
     start_cameras(picam2_a, picam2_b)
-    print("[ndvi] Cameras ready — waiting for mission events")
+    log_state("Cameras ready — waiting for mission events")
 
     exit_status = 0
     try:
@@ -368,13 +394,13 @@ def main():
         else:
             run_flight(picam2_a, picam2_b)
     except _MSPTransientError as e:
-        print(f"[TRANSIENT ERROR] {e}")
+        log_state(f"[TRANSIENT ERROR] {e}")
         exit_status = 1
     except _MissionSyncError as e:
-        print(f"[SYNC ERROR] {e}")
+        log_state(f"[SYNC ERROR] {e}")
         exit_status = 2
     except KeyboardInterrupt:
-        print("Keyboard interrupt received.")
+        log_state("Keyboard interrupt received")
     finally:
         stop_cameras(picam2_a, picam2_b)
         if _mission_ctx is not None:
@@ -383,9 +409,9 @@ def main():
                 f.write(f"Completed flight: {_mission_ctx.mission_id} with {WP} waypoints.\n")
             if _offload_on_exit:
                 open("/tmp/offload_requested", "w").close()
-                print("Offload trigger written to /tmp/offload_requested")
+                log_state("Offload trigger written to /tmp/offload_requested")
         elif _offload_on_exit:
-            print("[ndvi] Shutdown with no mission active — offload skipped.")
+            log_state("Shutdown with no mission active — offload skipped")
 
     if exit_status:
         sys.exit(exit_status)

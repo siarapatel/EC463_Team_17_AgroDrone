@@ -248,6 +248,13 @@ _last_status: Optional[dict] = None
 _last_status_lock = threading.Lock()
 
 
+def _format_status(status: dict) -> str:
+    return (
+        f"waypoint={status.get('waypoint')} "
+        f"mission_complete={status.get('mission_complete')}"
+    )
+
+
 def _broadcast_status(status: dict) -> None:
     """Send one mission status JSON line to all subscribers; drop dead connections."""
     global _last_status
@@ -258,6 +265,12 @@ def _broadcast_status(status: dict) -> None:
         _last_status = status
 
     line = (json.dumps(status) + "\n").encode()
+    with _event_subscribers_lock:
+        subscriber_count = len(_event_subscribers)
+    print(
+        f"[msp-uart] Emitting mission_status | {_format_status(status)} "
+        f"subscribers={subscriber_count}"
+    )
     with _event_subscribers_lock:
         alive = []
         for conn in _event_subscribers:
