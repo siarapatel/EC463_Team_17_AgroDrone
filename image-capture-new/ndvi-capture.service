@@ -1,12 +1,10 @@
 # /etc/systemd/system/ndvi-capture.service
 #
-# Boot-start capture unit. Starts at boot, warms cameras immediately, and
-# waits idle for flight events from the MSP UART hub. Restarts automatically
-# after each completed mission so the system is ready for the next flight
-# without a reboot.
-#
-# Exit code 2 (sync integrity failure) is NOT restarted — operator must
-# investigate before the next mission.
+# Boot-start capture unit. Starts at boot, warms cameras immediately, then
+# captures every 10 seconds. Position metadata is polled non-blocking from
+# the MSP UART service; captures continue with null position if unavailable.
+# Restarts automatically so the system is ready for the next flight without
+# a reboot.
 #
 # Deploy:
 #   sudo cp ndvi-capture.service /etc/systemd/system/
@@ -21,7 +19,7 @@
 [Unit]
 Description=NDVI Dual Camera Capture
 After=multi-user.target agrodrone-msp-uart.service
-Requires=agrodrone-msp-uart.service
+Wants=agrodrone-msp-uart.service
 
 [Service]
 Type=simple
@@ -32,12 +30,8 @@ EnvironmentFile=/home/sr-design/EC463_Team_17_AgroDrone/.env
 
 ExecStart=/usr/bin/python3 /home/sr-design/agrodrone-system/ndvi_image_capture.py
 
-# Restart after every exit (clean mission complete or transient error) so the
-# system is immediately ready for the next mission. Code 2 (sync failure) is
-# excluded so a data-integrity stop requires manual intervention.
 Restart=always
 RestartSec=5
-RestartPreventExitStatus=2
 
 StandardOutput=journal
 StandardError=journal
