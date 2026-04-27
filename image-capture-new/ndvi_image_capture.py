@@ -338,6 +338,8 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
                         f"stale={(event.get('position') or {}).get('stale', True)}"
                     )
 
+                    _accepted_position_snapshot = _position_snapshot_from_event(event)
+
                     if event.get("mission_complete"):
                         if _mission_ctx is None:
                             log_state("Mission-complete snapshot ignored while idle")
@@ -360,7 +362,6 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
                         log_state("First active waypoint received — initializing mission context")
                         initialize_mission_context()
                         WP = next_wp
-                        _accepted_position_snapshot = _position_snapshot_from_event(event)
                         log_state(f"Waypoint accepted | local={WP} reason=mission_start")
                         on_capture_press(picam0, picam1)
                     else:
@@ -378,7 +379,6 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
                             )
                         previous_wp = WP
                         WP = next_wp
-                        _accepted_position_snapshot = _position_snapshot_from_event(event)
                         log_state(f"Waypoint accepted | local={previous_wp} next={WP}")
                         on_capture_press(picam0, picam1)
 
