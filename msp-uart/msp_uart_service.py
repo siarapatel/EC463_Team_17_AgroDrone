@@ -9,7 +9,12 @@ small local IPC surfaces:
   msp-control.sock — request/response control channel for mission uploads
 
 Events socket messages:
-  {"type": "mission_status", "waypoint": N, "mission_complete": false}
+  {
+    "type": "mission_status",
+    "waypoint": N,
+    "mission_complete": false,
+    "position": {...}
+  }
 
 Control socket messages:
   client → service: {"type": "upload_request"}
@@ -27,6 +32,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Optional
 
 # ---------------------------------------------------------------------------
@@ -35,6 +41,9 @@ from typing import Optional
 SERIAL_PORT          = os.environ.get("MSP_SERIAL_PORT",          "/dev/serial0")
 BAUD_RATE            = int(os.environ.get("MSP_BAUD_RATE",        "115200"))
 POLL_INTERVAL        = float(os.environ.get("MSP_POLL_INTERVAL",  "0.2"))  # 5 Hz
+SERIAL_TIMEOUT       = float(os.environ.get("MSP_SERIAL_TIMEOUT", "0.05"))
+TELEMETRY_TIMEOUT    = float(os.environ.get("MSP_TELEMETRY_TIMEOUT", "0.05"))
+TELEMETRY_STALE_SECS = float(os.environ.get("MSP_TELEMETRY_STALE_SECS", "1.0"))
 EVENTS_SOCKET_PATH   = os.environ.get("MSP_EVENTS_SOCKET_PATH",   "/run/agrodrone/msp-events.sock")
 CONTROL_SOCKET_PATH  = os.environ.get("MSP_CONTROL_SOCKET_PATH",  "/run/agrodrone/msp-control.sock")
 WAYPOINTS_PATH       = os.environ.get("WAYPOINTS_PATH",
@@ -43,13 +52,14 @@ WAYPOINTS_PATH       = os.environ.get("WAYPOINTS_PATH",
 # ---------------------------------------------------------------------------
 # MSP V2 constants
 # ---------------------------------------------------------------------------
+MSP_RAW_GPS     = 106
+MSP_ALTITUDE    = 109
 MSP_NAV_STATUS  = 121
 MSP_SET_WP      = 209
 MSP_SAVE_NVRAM  = 19
 
 WAYPOINT_ACTION = 0x01   # INAV: "Fly here"
 LAST_WP_FLAG    = 0xA5   # marks final waypoint
-WP_ALTITUDE_CM  = 3000   # 30 m in centimetres
 
 # ---------------------------------------------------------------------------
 # MSP V2 protocol helpers
@@ -118,6 +128,13 @@ def read_msp_v2_response(ser) -> Optional[tuple]:
     return function, payload
 
 
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace(
+        "+00:00",
+        "Z",
+    )
+
+
 def _parse_nav_status(payload: bytes) -> Optional[dict]:
     """
     Parse raw MSP_NAV_STATUS payload into a dict of named fields.
@@ -141,6 +158,53 @@ def _parse_nav_status(payload: bytes) -> Optional[dict]:
         "nav_activeWpAction":    nav_activeWpAction,
         "nav_error":             nav_error,
         "nav_headingHoldTarget": nav_headingHoldTarget,
+    }
+
+
+def _parse_raw_gps(payload: bytes) -> Optional[dict]:
+    """
+    Parse the leading MSP_RAW_GPS fields exposed by INAV.
+
+    Layout used here matches the classic MSP definition:
+      uint8   fix
+      uint8   num_sat
+      int32   lat (degE7)
+      int32   lon (degE7)
+      int16   alt_msl_m
+      uint16  speed_cm_s
+      uint16  ground_course_tenths_deg
+    """
+    if len(payload) < 16:
+        return None
+
+    fix, num_sat, lat_raw, lon_raw, alt_msl_m, speed_cm_s, ground_course_tenths = (
+        struct.unpack("<BBiihHH", payload[:16])
+    )
+    return {
+        "fix": fix,
+        "num_sat": num_sat,
+        "lat": lat_raw / 10_000_000.0,
+        "lon": lon_raw / 10_000_000.0,
+        "alt_msl_m": float(alt_msl_m),
+        "speed_m_s": speed_cm_s / 100.0,
+        "ground_course_deg": ground_course_tenths / 10.0,
+    }
+
+
+def _parse_altitude(payload: bytes) -> Optional[dict]:
+    """
+    Parse MSP_ALTITUDE.
+
+    INAV exposes estimated relative altitude in centimetres followed by the
+    variometer reading in centimetres per second.
+    """
+    if len(payload) < 6:
+        return None
+
+    alt_cm, variometer_cm_s = struct.unpack("<ih", payload[:6])
+    return {
+        "alt_rel_m": alt_cm / 100.0,
+        "variometer_m_s": variometer_cm_s / 100.0,
     }
 
 def _mission_status_from_nav(nav: dict) -> dict:
@@ -214,8 +278,9 @@ def run_upload(ser) -> tuple:
         for i, point in enumerate(waypoints):
             wp_index = i + 1
             is_last  = (i == len(waypoints) - 1)
+            alt_cm   = int(point["alt_m"] * 100)
             _upload_waypoint(ser, wp_index, point["lat"], point["lng"],
-                             WP_ALTITUDE_CM, is_last)
+                             alt_cm, is_last)
 
         # Save to EEPROM
         ser.write(build_msp_v2(MSP_SAVE_NVRAM, b""))
@@ -236,6 +301,77 @@ class UploadRequest:
     reply_event: threading.Event = field(default_factory=threading.Event)
     result: list = field(default_factory=lambda: [False, "not set"])
 
+
+@dataclass
+class TelemetryCache:
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    alt_rel_m: Optional[float] = None
+    timestamp_utc: Optional[str] = None
+    last_refresh_monotonic: Optional[float] = None
+    _gps_source_valid: bool = False
+    _alt_source_valid: bool = False
+    _gps_sample_monotonic: Optional[float] = None
+    _alt_sample_monotonic: Optional[float] = None
+
+    def _mark_refresh(self, now_monotonic: float) -> None:
+        self.last_refresh_monotonic = now_monotonic
+        self.timestamp_utc = _utc_now_iso()
+
+    def update_raw_gps(self, gps: dict) -> None:
+        now_monotonic = time.monotonic()
+        self._mark_refresh(now_monotonic)
+        self._gps_sample_monotonic = now_monotonic
+
+        if gps["fix"] > 0:
+            self.lat = gps["lat"]
+            self.lon = gps["lon"]
+            self._gps_source_valid = True
+        else:
+            self._gps_source_valid = False
+
+    def update_altitude(self, altitude: dict) -> None:
+        now_monotonic = time.monotonic()
+        self._mark_refresh(now_monotonic)
+        self._alt_sample_monotonic = now_monotonic
+        self.alt_rel_m = altitude["alt_rel_m"]
+        self._alt_source_valid = True
+
+    def snapshot(self) -> dict:
+        now_monotonic = time.monotonic()
+        gps_fresh = (
+            self._gps_sample_monotonic is not None
+            and (now_monotonic - self._gps_sample_monotonic) <= TELEMETRY_STALE_SECS
+        )
+        alt_fresh = (
+            self._alt_sample_monotonic is not None
+            and (now_monotonic - self._alt_sample_monotonic) <= TELEMETRY_STALE_SECS
+        )
+        gps_valid = (
+            self._gps_source_valid
+            and gps_fresh
+            and self.lat is not None
+            and self.lon is not None
+        )
+        alt_valid = (
+            self._alt_source_valid
+            and alt_fresh
+            and self.alt_rel_m is not None
+        )
+        stale = (
+            self.last_refresh_monotonic is None
+            or (now_monotonic - self.last_refresh_monotonic) > TELEMETRY_STALE_SECS
+        )
+        return {
+            "lat": self.lat if gps_valid else None,
+            "lon": self.lon if gps_valid else None,
+            "alt_rel_m": self.alt_rel_m if alt_valid else None,
+            "gps_valid": gps_valid,
+            "alt_valid": alt_valid,
+            "stale": stale,
+            "timestamp": self.timestamp_utc,
+        }
+
 _command_queue: queue.Queue = queue.Queue()
 
 # ---------------------------------------------------------------------------
@@ -245,18 +381,41 @@ _command_queue: queue.Queue = queue.Queue()
 _event_subscribers: list = []
 _event_subscribers_lock = threading.Lock()
 _last_emitted_status: Optional[dict] = None
-_replay_status: dict = {
-    "type": "mission_status",
-    "waypoint": 0,
-    "mission_complete": False,
-}
 _status_lock = threading.Lock()
 
 
+def _neutral_position_snapshot() -> dict:
+    return {
+        "lat": None,
+        "lon": None,
+        "alt_rel_m": None,
+        "gps_valid": False,
+        "alt_valid": False,
+        "stale": True,
+        "timestamp": None,
+    }
+
+
+def _neutral_replay_status() -> dict:
+    return {
+        "type": "mission_status",
+        "waypoint": 0,
+        "mission_complete": False,
+        "position": _neutral_position_snapshot(),
+    }
+
+
+_replay_status: dict = _neutral_replay_status()
+
+
 def _format_status(status: dict) -> str:
+    position = status.get("position") or {}
     return (
         f"waypoint={status.get('waypoint')} "
-        f"mission_complete={status.get('mission_complete')}"
+        f"mission_complete={status.get('mission_complete')} "
+        f"gps_valid={position.get('gps_valid')} "
+        f"alt_valid={position.get('alt_valid')} "
+        f"stale={position.get('stale')}"
     )
 
 
@@ -313,19 +472,23 @@ def _handle_status_update(status: dict) -> None:
             and _last_emitted_status is not None
             and _is_terminal_complete(_last_emitted_status)
         )
+        suppress_repeated_terminal_complete = (
+            _is_terminal_complete(status)
+            and _last_emitted_status is not None
+            and _is_terminal_complete(_last_emitted_status)
+        )
 
         _last_emitted_status = dict(status)
         if _is_terminal_complete(status):
-            _replay_status = {
-                "type": "mission_status",
-                "waypoint": 0,
-                "mission_complete": False,
-            }
+            _replay_status = _neutral_replay_status()
         else:
             _replay_status = dict(status)
 
     if suppress_live_broadcast:
         print("[msp-uart] Suppressing live neutral reset after terminal completion")
+        return
+    if suppress_repeated_terminal_complete:
+        print("[msp-uart] Suppressing repeated mission-complete snapshot")
         return
 
     _send_status_to_subscribers(status)
@@ -339,13 +502,42 @@ def _send_replay_status(conn: socket.socket, status: dict) -> None:
 # Serial loop (the ONLY code path that ever touches the serial port)
 # ---------------------------------------------------------------------------
 
+def _request_msp_payload(ser, function: int, timeout: float) -> Optional[bytes]:
+    previous_timeout = ser.timeout
+    deadline = time.monotonic() + timeout
+    try:
+        ser.write(build_msp_v2(function))
+        while time.monotonic() < deadline:
+            ser.timeout = max(0.001, deadline - time.monotonic())
+            result = read_msp_v2_response(ser)
+            if result is None:
+                if ser.in_waiting:
+                    ser.read(ser.in_waiting)
+                return None
+
+            response_function, payload = result
+            if response_function == function:
+                return payload
+        return None
+    finally:
+        ser.timeout = previous_timeout
+
+
+def _build_status_snapshot(nav: dict, telemetry_cache: TelemetryCache) -> dict:
+    status = _mission_status_from_nav(nav)
+    status["position"] = telemetry_cache.snapshot()
+    return status
+
+
 def serial_loop(shutdown: threading.Event) -> None:
     import serial
 
     print(f"[msp-uart] Opening {SERIAL_PORT} @ {BAUD_RATE}")
-    ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
+    ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=SERIAL_TIMEOUT)
 
     print("[msp-uart] Serial port open — starting poll loop")
+    telemetry_cache = TelemetryCache()
+    next_telemetry_function = MSP_ALTITUDE
 
     try:
         while not shutdown.is_set():
@@ -360,18 +552,37 @@ def serial_loop(shutdown: threading.Event) -> None:
             except queue.Empty:
                 pass
 
-            # Poll nav status and emit the latest mission status snapshot
-            ser.write(build_msp_v2(MSP_NAV_STATUS))
-            result = read_msp_v2_response(ser)
-            if result is not None:
-                function, payload = result
-                if function == MSP_NAV_STATUS:
-                    nav = _parse_nav_status(payload)
-                    if nav:
-                        _handle_status_update(_mission_status_from_nav(nav))
-            else:
-                if ser.in_waiting:
-                    ser.read(ser.in_waiting)
+            # Poll NAV first so mission-state publication stays independent from
+            # best-effort position telemetry.
+            nav_payload = _request_msp_payload(ser, MSP_NAV_STATUS, SERIAL_TIMEOUT)
+            if nav_payload is not None:
+                nav = _parse_nav_status(nav_payload)
+                if nav:
+                    _handle_status_update(_build_status_snapshot(nav, telemetry_cache))
+
+            # At most one opportunistic telemetry request per loop, alternating
+            # altitude and GPS so mission flow never waits on both.
+            if _command_queue.empty():
+                telemetry_payload = _request_msp_payload(
+                    ser,
+                    next_telemetry_function,
+                    TELEMETRY_TIMEOUT,
+                )
+                if telemetry_payload is not None:
+                    if next_telemetry_function == MSP_ALTITUDE:
+                        altitude = _parse_altitude(telemetry_payload)
+                        if altitude is not None:
+                            telemetry_cache.update_altitude(altitude)
+                    elif next_telemetry_function == MSP_RAW_GPS:
+                        gps = _parse_raw_gps(telemetry_payload)
+                        if gps is not None:
+                            telemetry_cache.update_raw_gps(gps)
+
+                next_telemetry_function = (
+                    MSP_RAW_GPS
+                    if next_telemetry_function == MSP_ALTITUDE
+                    else MSP_ALTITUDE
+                )
 
             time.sleep(POLL_INTERVAL)
     finally:

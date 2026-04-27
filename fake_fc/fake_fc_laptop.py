@@ -29,11 +29,17 @@ import threading
 import time
 
 
+MSP_RAW_GPS = 106
+MSP_ALTITUDE = 109
 MSP_NAV_STATUS = 121
 MSP_SET_WP = 209
 MSP_SAVE_NVRAM = 19
 
 WAYPOINT_ACTION = 0x01
+BASE_LAT = 42.3890975
+BASE_LON = -71.1384045
+BASE_ALT_MSL_M = 34.0
+BASE_ALT_REL_M = 12.3
 
 
 # ---------------------------------------------------------------------------
@@ -120,6 +126,31 @@ def nav_payload(nav_mode: int, nav_state: int, wp_num: int, wp_action: int) -> b
         0,  # nav_error
         0,  # nav_headingHoldTarget
     )
+
+
+def raw_gps_payload(
+    lat_deg: float,
+    lon_deg: float,
+    alt_msl_m: float,
+    fix: int = 1,
+    num_sat: int = 10,
+    speed_cm_s: int = 350,
+    ground_course_deg: float = 91.0,
+) -> bytes:
+    return struct.pack(
+        "<BBiihHH",
+        fix,
+        num_sat,
+        int(round(lat_deg * 10_000_000)),
+        int(round(lon_deg * 10_000_000)),
+        int(round(alt_msl_m)),
+        speed_cm_s,
+        int(round(ground_course_deg * 10.0)),
+    )
+
+
+def altitude_payload(alt_rel_m: float, variometer_cm_s: int = 0) -> bytes:
+    return struct.pack("<ih", int(round(alt_rel_m * 100.0)), variometer_cm_s)
 
 
 def build_sequence(name: str, custom_waypoints: list[int]) -> list[bytes]:
@@ -263,6 +294,26 @@ class Responder:
     def stop(self):
         self._stop.set()
 
+    def _position_step(self) -> float:
+        return self._index + (self._polls_at_state / max(self._hold_polls, 1))
+
+    def _raw_gps_reply(self) -> bytes:
+        step = self._position_step()
+        return raw_gps_payload(
+            lat_deg=BASE_LAT + (step * 0.00001),
+            lon_deg=BASE_LON - (step * 0.00001),
+            alt_msl_m=BASE_ALT_MSL_M + (step * 0.4),
+            speed_cm_s=350 + int(step * 10),
+            ground_course_deg=91.0 + step,
+        )
+
+    def _altitude_reply(self) -> bytes:
+        step = self._position_step()
+        return altitude_payload(
+            alt_rel_m=BASE_ALT_REL_M + (step * 0.5),
+            variometer_cm_s=15,
+        )
+
     def run(self):
         while not self._stop.is_set():
             request = read_msp_v2_request(self._ser)
@@ -291,6 +342,30 @@ class Responder:
                         ):
                             self._index += 1
                             self._polls_at_state = 0
+
+            elif function == MSP_RAW_GPS:
+                with self._lock:
+                    gps_payload = self._raw_gps_reply()
+                    self._ser.write(build_msp_v2_response(MSP_RAW_GPS, gps_payload))
+                    fix, num_sat, lat_raw, lon_raw, alt_msl_m, _, _ = struct.unpack(
+                        "<BBiihHH",
+                        gps_payload,
+                    )
+                    print(
+                        f"[fake-fc] GPS reply | fix={fix} sats={num_sat} "
+                        f"lat={lat_raw / 1e7:.7f} lon={lon_raw / 1e7:.7f} "
+                        f"alt_msl={alt_msl_m}m"
+                    )
+
+            elif function == MSP_ALTITUDE:
+                with self._lock:
+                    alt_payload = self._altitude_reply()
+                    self._ser.write(build_msp_v2_response(MSP_ALTITUDE, alt_payload))
+                    alt_cm, variometer_cm_s = struct.unpack("<ih", alt_payload)
+                    print(
+                        f"[fake-fc] ALT reply | alt_rel={alt_cm / 100.0:.2f}m "
+                        f"vario={variometer_cm_s / 100.0:.2f}m/s"
+                    )
 
             elif function == MSP_SET_WP:
                 info = decode_set_wp(payload)

@@ -57,6 +57,34 @@ _mission_ctx: Optional[MissionContext] = None
 WP = 0  # Current waypoint number — updated at runtime
 
 
+def _default_position_snapshot() -> dict:
+    return {
+        "lat": None,
+        "lon": None,
+        "alt_rel_m": None,
+        "gps_valid": False,
+        "alt_valid": False,
+        "stale": True,
+        "timestamp": None,
+    }
+
+
+def _position_snapshot_from_event(event: dict) -> dict:
+    position = event.get("position") or {}
+    return {
+        "lat": position.get("lat"),
+        "lon": position.get("lon"),
+        "alt_rel_m": position.get("alt_rel_m"),
+        "gps_valid": bool(position.get("gps_valid", False)),
+        "alt_valid": bool(position.get("alt_valid", False)),
+        "stale": bool(position.get("stale", True)),
+        "timestamp": position.get("timestamp"),
+    }
+
+
+_accepted_position_snapshot = _default_position_snapshot()
+
+
 def initialize_mission_context() -> MissionContext:
     global _mission_ctx
     flight_plan_id  = read_fpid(WAYPOINTS_PATH)
@@ -183,6 +211,7 @@ def sequential_capture(picam0: Picamera2, picam1: Picamera2) -> dict:
     metadata_dict = {
         "capture_timestamp": timestamp,
         "waypoint": WP,
+        "position": dict(_accepted_position_snapshot),
         "camera_0": capture_from_camera(picam0, 0, timestamp, ctx.mission_path),
         "camera_1": capture_from_camera(picam1, 1, timestamp, ctx.mission_path),
     }
@@ -243,8 +272,9 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
     Replayed mission_complete=True snapshots from the hub are ignored while
     idle to prevent a Restart=always restart loop after clean mission exit.
     """
-    global WP
+    global WP, _accepted_position_snapshot
 
+    _accepted_position_snapshot = _default_position_snapshot()
     signal.signal(signal.SIGTERM, request_shutdown)
 
     while not _shutdown_event.is_set():
@@ -302,7 +332,10 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
                     log_state(
                         "Event received | "
                         f"waypoint={event.get('waypoint', 0)} "
-                        f"mission_complete={event.get('mission_complete', False)}"
+                        f"mission_complete={event.get('mission_complete', False)} "
+                        f"gps_valid={(event.get('position') or {}).get('gps_valid', False)} "
+                        f"alt_valid={(event.get('position') or {}).get('alt_valid', False)} "
+                        f"stale={(event.get('position') or {}).get('stale', True)}"
                     )
 
                     if event.get("mission_complete"):
@@ -327,6 +360,7 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
                         log_state("First active waypoint received — initializing mission context")
                         initialize_mission_context()
                         WP = next_wp
+                        _accepted_position_snapshot = _position_snapshot_from_event(event)
                         log_state(f"Waypoint accepted | local={WP} reason=mission_start")
                         on_capture_press(picam0, picam1)
                     else:
@@ -344,6 +378,7 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
                             )
                         previous_wp = WP
                         WP = next_wp
+                        _accepted_position_snapshot = _position_snapshot_from_event(event)
                         log_state(f"Waypoint accepted | local={previous_wp} next={WP}")
                         on_capture_press(picam0, picam1)
 
@@ -355,8 +390,10 @@ def run_flight(picam0: Picamera2, picam1: Picamera2):
 
 def run_test(picam0: Picamera2, picam1: Picamera2):
     """Test mode: fire TEST_COUNT capture cycles with a short delay."""
-    global WP
+    global WP, _accepted_position_snapshot
+    WP = 0
     initialize_mission_context()
+    _accepted_position_snapshot = _default_position_snapshot()
     log_state(f"TEST MODE: running {TEST_COUNT} capture cycle(s) into {_mission_ctx.mission_path}")
     for _ in range(TEST_COUNT):
         if _shutdown_event.is_set():

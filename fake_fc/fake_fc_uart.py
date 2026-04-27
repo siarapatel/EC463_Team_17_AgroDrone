@@ -27,11 +27,17 @@ import struct
 import time
 
 
+MSP_RAW_GPS = 106
+MSP_ALTITUDE = 109
 MSP_NAV_STATUS = 121
 MSP_SET_WP = 209
 MSP_SAVE_NVRAM = 19
 
 WAYPOINT_ACTION = 0x01
+BASE_LAT = 42.3890975
+BASE_LON = -71.1384045
+BASE_ALT_MSL_M = 34.0
+BASE_ALT_REL_M = 12.3
 
 
 def crc8_dvb_s2(data: bytes) -> int:
@@ -110,6 +116,31 @@ def nav_payload(nav_mode: int, nav_state: int, wp_num: int, wp_action: int) -> b
         0,   # nav_error
         0,   # nav_headingHoldTarget
     )
+
+
+def raw_gps_payload(
+    lat_deg: float,
+    lon_deg: float,
+    alt_msl_m: float,
+    fix: int = 1,
+    num_sat: int = 10,
+    speed_cm_s: int = 350,
+    ground_course_deg: float = 91.0,
+) -> bytes:
+    return struct.pack(
+        "<BBiihHH",
+        fix,
+        num_sat,
+        int(round(lat_deg * 10_000_000)),
+        int(round(lon_deg * 10_000_000)),
+        int(round(alt_msl_m)),
+        speed_cm_s,
+        int(round(ground_course_deg * 10.0)),
+    )
+
+
+def altitude_payload(alt_rel_m: float, variometer_cm_s: int = 0) -> bytes:
+    return struct.pack("<ih", int(round(alt_rel_m * 100.0)), variometer_cm_s)
 
 
 def build_sequence(name: str, custom_waypoints: list[int]) -> list[bytes]:
@@ -214,6 +245,39 @@ def main() -> None:
                 if polls_at_current_state >= args.hold_polls and sequence_index < len(sequence) - 1:
                     sequence_index += 1
                     polls_at_current_state = 0
+
+            elif function == MSP_RAW_GPS:
+                position_step = sequence_index + (polls_at_current_state / max(args.hold_polls, 1))
+                gps_payload = raw_gps_payload(
+                    lat_deg=BASE_LAT + (position_step * 0.00001),
+                    lon_deg=BASE_LON - (position_step * 0.00001),
+                    alt_msl_m=BASE_ALT_MSL_M + (position_step * 0.4),
+                    speed_cm_s=350 + int(position_step * 10),
+                    ground_course_deg=91.0 + position_step,
+                )
+                ser.write(build_msp_v2_response(MSP_RAW_GPS, gps_payload))
+                fix, num_sat, lat_raw, lon_raw, alt_msl_m, _, _ = struct.unpack(
+                    "<BBiihHH",
+                    gps_payload,
+                )
+                print(
+                    f"[fake-fc] GPS reply | fix={fix} sats={num_sat} "
+                    f"lat={lat_raw / 1e7:.7f} lon={lon_raw / 1e7:.7f} "
+                    f"alt_msl={alt_msl_m}m"
+                )
+
+            elif function == MSP_ALTITUDE:
+                position_step = sequence_index + (polls_at_current_state / max(args.hold_polls, 1))
+                alt_payload = altitude_payload(
+                    alt_rel_m=BASE_ALT_REL_M + (position_step * 0.5),
+                    variometer_cm_s=15,
+                )
+                ser.write(build_msp_v2_response(MSP_ALTITUDE, alt_payload))
+                alt_cm, variometer_cm_s = struct.unpack("<ih", alt_payload)
+                print(
+                    f"[fake-fc] ALT reply | alt_rel={alt_cm / 100.0:.2f}m "
+                    f"vario={variometer_cm_s / 100.0:.2f}m/s"
+                )
 
             elif function == MSP_SET_WP:
                 print(f"[fake-fc] Received MSP_SET_WP payload ({len(payload)} bytes)")
