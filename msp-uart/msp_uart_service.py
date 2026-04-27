@@ -54,6 +54,7 @@ WAYPOINTS_PATH       = os.environ.get("WAYPOINTS_PATH",
 # ---------------------------------------------------------------------------
 MSP_RAW_GPS     = 106
 MSP_ALTITUDE    = 109
+MSP_ATTITUDE    = 108
 MSP_NAV_STATUS  = 121
 MSP_SET_WP      = 209
 MSP_SAVE_NVRAM  = 19
@@ -207,6 +208,22 @@ def _parse_altitude(payload: bytes) -> Optional[dict]:
         "variometer_m_s": variometer_cm_s / 100.0,
     }
 
+
+def _parse_attitude(payload: bytes) -> Optional[dict]:
+    """
+    Parse MSP_ATTITUDE.
+
+    INAV encodes roll and pitch in decidegrees (int16) and heading in degrees
+    (int16, range 0–360).
+    """
+    if len(payload) < 6:
+        return None
+
+    _roll_dd, _pitch_dd, heading_deg = struct.unpack("<hhh", payload[:6])
+    return {
+        "heading_deg": float(heading_deg % 360),
+    }
+
 def _mission_status_from_nav(nav: dict) -> dict:
     """
     Reduce raw FC nav fields to the only state the capture pipeline needs.
@@ -307,12 +324,15 @@ class TelemetryCache:
     lat: Optional[float] = None
     lon: Optional[float] = None
     alt_rel_m: Optional[float] = None
+    heading_deg: Optional[float] = None
     timestamp_utc: Optional[str] = None
     last_refresh_monotonic: Optional[float] = None
     _gps_source_valid: bool = False
     _alt_source_valid: bool = False
+    _heading_source_valid: bool = False
     _gps_sample_monotonic: Optional[float] = None
     _alt_sample_monotonic: Optional[float] = None
+    _heading_sample_monotonic: Optional[float] = None
 
     def _mark_refresh(self, now_monotonic: float) -> None:
         self.last_refresh_monotonic = now_monotonic
@@ -337,6 +357,13 @@ class TelemetryCache:
         self.alt_rel_m = altitude["alt_rel_m"]
         self._alt_source_valid = True
 
+    def update_attitude(self, attitude: dict) -> None:
+        now_monotonic = time.monotonic()
+        self._mark_refresh(now_monotonic)
+        self._heading_sample_monotonic = now_monotonic
+        self.heading_deg = attitude["heading_deg"]
+        self._heading_source_valid = True
+
     def snapshot(self) -> dict:
         now_monotonic = time.monotonic()
         gps_fresh = (
@@ -346,6 +373,10 @@ class TelemetryCache:
         alt_fresh = (
             self._alt_sample_monotonic is not None
             and (now_monotonic - self._alt_sample_monotonic) <= TELEMETRY_STALE_SECS
+        )
+        heading_fresh = (
+            self._heading_sample_monotonic is not None
+            and (now_monotonic - self._heading_sample_monotonic) <= TELEMETRY_STALE_SECS
         )
         gps_valid = (
             self._gps_source_valid
@@ -358,6 +389,11 @@ class TelemetryCache:
             and alt_fresh
             and self.alt_rel_m is not None
         )
+        heading_valid = (
+            self._heading_source_valid
+            and heading_fresh
+            and self.heading_deg is not None
+        )
         stale = (
             self.last_refresh_monotonic is None
             or (now_monotonic - self.last_refresh_monotonic) > TELEMETRY_STALE_SECS
@@ -366,8 +402,10 @@ class TelemetryCache:
             "lat": self.lat if gps_valid else None,
             "lon": self.lon if gps_valid else None,
             "alt_rel_m": self.alt_rel_m if alt_valid else None,
+            "heading_deg": self.heading_deg if heading_valid else None,
             "gps_valid": gps_valid,
             "alt_valid": alt_valid,
+            "heading_valid": heading_valid,
             "stale": stale,
             "timestamp": self.timestamp_utc,
         }
@@ -538,6 +576,7 @@ def serial_loop(shutdown: threading.Event) -> None:
     print("[msp-uart] Serial port open — starting poll loop")
     telemetry_cache = TelemetryCache()
     next_telemetry_function = MSP_ALTITUDE
+    _TELEMETRY_SEQUENCE = (MSP_ALTITUDE, MSP_RAW_GPS, MSP_ATTITUDE)
 
     try:
         while not shutdown.is_set():
@@ -577,12 +616,13 @@ def serial_loop(shutdown: threading.Event) -> None:
                         gps = _parse_raw_gps(telemetry_payload)
                         if gps is not None:
                             telemetry_cache.update_raw_gps(gps)
+                    elif next_telemetry_function == MSP_ATTITUDE:
+                        attitude = _parse_attitude(telemetry_payload)
+                        if attitude is not None:
+                            telemetry_cache.update_attitude(attitude)
 
-                next_telemetry_function = (
-                    MSP_RAW_GPS
-                    if next_telemetry_function == MSP_ALTITUDE
-                    else MSP_ALTITUDE
-                )
+                next_idx = (_TELEMETRY_SEQUENCE.index(next_telemetry_function) + 1) % len(_TELEMETRY_SEQUENCE)
+                next_telemetry_function = _TELEMETRY_SEQUENCE[next_idx]
 
             time.sleep(POLL_INTERVAL)
     finally:

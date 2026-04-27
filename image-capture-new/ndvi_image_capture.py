@@ -62,8 +62,10 @@ def _default_position_snapshot() -> dict:
         "lat": None,
         "lon": None,
         "alt_rel_m": None,
+        "heading_deg": None,
         "gps_valid": False,
         "alt_valid": False,
+        "heading_valid": False,
         "stale": True,
         "timestamp": None,
     }
@@ -75,8 +77,10 @@ def _position_snapshot_from_event(event: dict) -> dict:
         "lat": position.get("lat"),
         "lon": position.get("lon"),
         "alt_rel_m": position.get("alt_rel_m"),
+        "heading_deg": position.get("heading_deg"),
         "gps_valid": bool(position.get("gps_valid", False)),
         "alt_valid": bool(position.get("alt_valid", False)),
+        "heading_valid": bool(position.get("heading_valid", False)),
         "stale": bool(position.get("stale", True)),
         "timestamp": position.get("timestamp"),
     }
