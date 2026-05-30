@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch for waypoints.json changes to trigger FC mission upload
+After=agrodrone-msp-uart.service
+Requires=agrodrone-msp-uart.service
+
+[Path]
+PathChanged=/home/sr-design/agrodrone-system/waypoints.json
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,7 @@
+# RETIRED — do not deploy
+#
+# This path unit was part of a first-waypoint activation design that has been
+# superseded. ndvi-capture.service now starts at boot directly and handles
+# idle/active state internally. This file is kept for history only.
+#
+# See ndvi-capture.service for the current deployment model.

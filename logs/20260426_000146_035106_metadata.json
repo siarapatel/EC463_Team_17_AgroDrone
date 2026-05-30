@@ -1,0 +1,41 @@
+{
+  "capture_timestamp": "20260426_000146_035106",
+  "waypoint": 1,
+  "position": {
+    "lat": null,
+    "lon": null,
+    "alt_rel_m": null,
+    "gps_valid": false,
+    "alt_valid": false,
+    "stale": true,
+    "timestamp": null
+  },
+  "camera_0": {
+    "camera_index": 0,
+    "timestamp": "20260426_000146_035106",
+    "capture_info": {
+      "image_path": "/home/sr-design/agrodrone-system/flightplans/pre_meta_post_reboot/3511337e-0418-4e2f-824e-91f180100b51/20260426_000146_035106_cam0.jpg",
+      "ExposureTime": 49980,
+      "AnalogueGain": 2.844444513320923,
+      "ColourGains": [
+        1.0521615743637085,
+        2.157705545425415
+      ],
+      "SensorTimestamp": 4392242961000
+    }
+  },
+  "camera_1": {
+    "camera_index": 1,
+    "timestamp": "20260426_000146_035106",
+    "capture_info": {
+      "image_path": "/home/sr-design/agrodrone-system/flightplans/pre_meta_post_reboot/3511337e-0418-4e2f-824e-91f180100b51/20260426_000146_035106_cam1.jpg",
+      "ExposureTime": 49980,
+      "AnalogueGain": 2.7234041690826416,
+      "ColourGains": [
+        1.111566424369812,
+        1.9937103986740112
+      ],
+      "SensorTimestamp": 4392311960000
+    }
+  }
+}

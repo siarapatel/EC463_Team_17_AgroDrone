@@ -1,5 +1,7 @@
 # For Mac
 .DS_Store
+__pycache__/
+*.pyc
 
 # Prerequisites
 *.d

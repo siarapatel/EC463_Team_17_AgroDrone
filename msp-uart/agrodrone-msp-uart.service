@@ -1,0 +1,18 @@
+[Unit]
+Description=AgroDrone MSP UART Service (FC communication hub)
+After=multi-user.target
+
+[Service]
+Type=simple
+User=sr-design
+RuntimeDirectory=agrodrone
+RuntimeDirectoryMode=0755
+EnvironmentFile=/home/sr-design/EC463_Team_17_AgroDrone/.env
+ExecStart=/usr/bin/python3 -u /home/sr-design/EC463_Team_17_AgroDrone/msp-uart/msp_uart_service.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
